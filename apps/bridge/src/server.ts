@@ -1,32 +1,12 @@
 import type {
-  ContextSnapshot,
-  MemoryReferenceRecord,
-  OverviewSnapshot,
-  SearchSessionCard,
-  SessionSummary,
-  SkillActivationRecord,
-  ToolSessionCard
+  BoardStateSnapshot,
+  BridgeHealthSnapshot,
+  ContextSnapshot
 } from "@codex-realtime-board/shared";
 
-export interface BridgeState {
-  session: SessionSummary;
-  overview: OverviewSnapshot;
-  tools: ToolSessionCard[];
-  searches: SearchSessionCard[];
-  skills: SkillActivationRecord[];
-  memories: MemoryReferenceRecord[];
-  context: ContextSnapshot;
-}
-
-export interface BridgeHealth {
-  ok: true;
-  mode: "mock";
-  message: string;
-}
-
 export interface BridgeServer {
-  getHealth(): BridgeHealth;
-  getState(): BridgeState;
+  getHealth(): BridgeHealthSnapshot;
+  getState(): BoardStateSnapshot;
 }
 
 function minutesAgo(baseTime: Date, minutes: number): string {
@@ -43,7 +23,7 @@ export function createMockBridgeServer(baseTime: Date = new Date()): BridgeServe
     pressure: "low"
   };
 
-  const state: BridgeState = {
+  const state: BoardStateSnapshot = {
     session: {
       sessionId: "session_local_demo",
       title: "Codex Realtime Board V1 bootstrap",

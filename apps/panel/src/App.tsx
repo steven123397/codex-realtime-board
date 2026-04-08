@@ -1,102 +1,13 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+import { V1_PRIMARY_TABS, type V1PrimaryTab } from "@codex-realtime-board/shared";
 
 import {
-  V1_PRIMARY_TABS,
-  type MemoryReferenceRecord,
-  type OverviewSnapshot,
-  type SearchSessionCard,
-  type SessionSummary,
-  type SkillActivationRecord,
-  type ToolSessionCard,
-  type V1PrimaryTab
-} from "@codex-realtime-board/shared";
-
-const session: SessionSummary = {
-  sessionId: "session_local_demo",
-  title: "Codex Realtime Board V1 bootstrap",
-  status: "running",
-  lastActiveAt: new Date().toISOString(),
-  isManaged: true
-};
-
-const overview: OverviewSnapshot = {
-  currentTool: "webSearch",
-  currentPhase: "planning",
-  contextBudget: {
-    usedTokens: 38240,
-    contextWindow: 128000,
-    remainingTokens: 89760,
-    recentCompactions: [new Date(Date.now() - 48 * 60_000).toISOString()],
-    growthTrend: "rising",
-    pressure: "low"
-  },
-  pendingUserAction: null
-};
-
-const tools: ToolSessionCard[] = [
-  {
-    toolKind: "webSearch",
-    title: "Inspect app-server event surface",
-    reason: "Map raw protocol events to board-level cards",
-    summary: "Token usage, plan, item lifecycle, skills, search, and compact events are visible.",
-    startedAt: new Date(Date.now() - 20 * 60_000).toISOString(),
-    endedAt: new Date(Date.now() - 18 * 60_000).toISOString(),
-    status: "completed"
-  },
-  {
-    toolKind: "skill",
-    title: "Bootstrap implementation plan",
-    reason: "Lock the workspace shape before writing code",
-    summary: "Create a workspace plan and align launcher, bridge, panel, and shared boundaries.",
-    startedAt: new Date(Date.now() - 12 * 60_000).toISOString(),
-    status: "active"
-  }
-];
-
-const searches: SearchSessionCard[] = [
-  {
-    query: "codex app-server structured events",
-    actions: ["webSearch", "open docs", "compare event names"],
-    summary: "A single search session rolls up page access and result synthesis.",
-    inferredIndexing: false,
-    startedAt: new Date(Date.now() - 22 * 60_000).toISOString(),
-    status: "completed"
-  }
-];
-
-const skills: SkillActivationRecord[] = [
-  {
-    skillName: "brainstorming",
-    source: "local skill registry",
-    status: "completed",
-    timestamp: new Date(Date.now() - 16 * 60_000).toISOString()
-  },
-  {
-    skillName: "writing-plans",
-    source: "local skill registry",
-    status: "completed",
-    timestamp: new Date(Date.now() - 11 * 60_000).toISOString()
-  }
-];
-
-const memories: MemoryReferenceRecord[] = [
-  {
-    sourceThreadId: "thread_bootstrap",
-    entries: [
-      {
-        title: "V1 information priority",
-        excerpt: "Tools first, process state second, context budget third."
-      }
-    ],
-    usedByTurnId: "turn_bootstrap"
-  }
-];
-
-const timeline = [
-  "Overview 顶部摘要固定展示当前工具、当前阶段和 context 预算。",
-  "Search 以会话卡片而不是原始事件流呈现。",
-  "Bridge 当前返回 mock 数据，后续再接入真实 app-server 事件。"
-];
+  buildOverviewTimeline,
+  createDemoBoardState,
+  loadPanelSnapshot,
+  type PanelSnapshot
+} from "./panelState.js";
 
 function formatLocalTime(value: string): string {
   return new Intl.DateTimeFormat("zh-CN", {
@@ -126,12 +37,88 @@ function renderList(title: string, items: string[]): React.JSX.Element {
   );
 }
 
+function renderEmptyState(title: string, body: string): React.JSX.Element {
+  return (
+    <section className="event-list">
+      <article className="event-card empty-state">
+        <strong>{title}</strong>
+        <p>{body}</p>
+      </article>
+    </section>
+  );
+}
+
+function getFeedLabel(snapshot: PanelSnapshot, loading: boolean): string {
+  if (loading) {
+    return "Connecting";
+  }
+
+  return snapshot.source === "bridge" ? "Live bridge" : "Demo fallback";
+}
+
+function getFeedTone(snapshot: PanelSnapshot, loading: boolean): string {
+  if (loading) {
+    return "loading";
+  }
+
+  return snapshot.source === "bridge" ? "live" : "fallback";
+}
+
+function getHeroCopy(snapshot: PanelSnapshot, loading: boolean): string {
+  if (loading) {
+    return "Panel 正在尝试从本地 bridge 拉取 `/api/state`，成功后会把首页切到真实的归一化会话快照。";
+  }
+
+  if (snapshot.source === "bridge") {
+    return "Companion panel 已开始消费 bridge 的归一化状态：顶部摘要、Tabs 与 Overview 时间线都来自真实 `app-server` 事件聚合。";
+  }
+
+  return "当前未连上本地 bridge，所以页面先退回 demo snapshot；你仍然可以继续调界面，bridge 恢复后刷新即可切回真实数据。";
+}
+
 export default function App(): React.JSX.Element {
   const [activeTab, setActiveTab] = useState<V1PrimaryTab>("Overview");
+  const [panelSnapshot, setPanelSnapshot] = useState<PanelSnapshot>(() => ({
+    board: createDemoBoardState(),
+    source: "fallback",
+    errorMessage: null
+  }));
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function bootstrap(): Promise<void> {
+      const snapshot = await loadPanelSnapshot();
+      if (cancelled) {
+        return;
+      }
+
+      setPanelSnapshot(snapshot);
+      setLoading(false);
+    }
+
+    void bootstrap();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const { board } = panelSnapshot;
+  const { session, overview, tools, searches, skills, memories, context } = board;
 
   const contextUsage = useMemo(() => {
+    if (overview.contextBudget.contextWindow <= 0) {
+      return 0;
+    }
+
     return Math.round((overview.contextBudget.usedTokens / overview.contextBudget.contextWindow) * 100);
-  }, []);
+  }, [overview.contextBudget.contextWindow, overview.contextBudget.usedTokens]);
+
+  const overviewTimeline = useMemo(() => buildOverviewTimeline(board), [board]);
+  const feedLabel = getFeedLabel(panelSnapshot, loading);
+  const feedTone = getFeedTone(panelSnapshot, loading);
 
   return (
     <main className="shell">
@@ -139,25 +126,32 @@ export default function App(): React.JSX.Element {
         <div className="hero-copy">
           <span className="eyebrow">Board-managed session</span>
           <h1>{session.title}</h1>
-          <p>
-            Companion panel 的第一版骨架已经就位。当前页面围绕设计文档里的数据模型渲染，
-            后续只需要把 bridge 的 mock 数据替换成真实 `app-server` 事件流。
-          </p>
+          <p>{getHeroCopy(panelSnapshot, loading)}</p>
         </div>
         <div className="hero-meta">
           <span className="meta-label">Session</span>
           <strong>{session.sessionId}</strong>
-          <span className="status-pill">{session.status}</span>
+          <div className="hero-pills">
+            <span className="status-pill">{session.status}</span>
+            <span className={`status-pill source-pill ${feedTone}`}>{feedLabel}</span>
+          </div>
           <span className="meta-label">Last active</span>
           <strong>{formatLocalTime(session.lastActiveAt)}</strong>
         </div>
       </section>
 
+      {panelSnapshot.errorMessage && !loading && (
+        <section className="notice-banner">
+          <strong>Bridge unavailable</strong>
+          <p>{panelSnapshot.errorMessage}. 当前继续展示 demo snapshot。</p>
+        </section>
+      )}
+
       <section className="summary-grid">
         <article className="summary-card">
           <span className="meta-label">Current tool</span>
           <strong>{overview.currentTool ?? "Idle"}</strong>
-          <p>V1 首优先级：实时知道它现在正在调用什么。</p>
+          <p>{overview.pendingUserAction ? overview.pendingUserAction.label : "V1 首优先级：实时知道它现在正在调用什么。"}</p>
         </article>
         <article className="summary-card">
           <span className="meta-label">Current phase</span>
@@ -194,93 +188,105 @@ export default function App(): React.JSX.Element {
 
       {activeTab === "Overview" && (
         <>
-          {renderList("Recent activity", timeline)}
+          {renderList("Recent activity", overviewTimeline)}
           <section className="panel-block two-column-grid">
             <article className="detail-card">
               <div className="section-heading">
-                <span>Current stack</span>
+                <span>Connection feed</span>
               </div>
               <ul>
-                <li>`launcher` 负责启动和附着入口</li>
-                <li>`bridge` 负责归一化事件和本地缓存</li>
-                <li>`panel` 使用共享模型直接渲染卡片与时间线</li>
+                <li>Source: {feedLabel}</li>
+                <li>Bridge endpoint: `GET /api/state`</li>
+                <li>Health endpoint: `GET /healthz`</li>
               </ul>
             </article>
             <article className="detail-card">
               <div className="section-heading">
-                <span>Next milestones</span>
+                <span>State signals</span>
               </div>
               <ul>
-                <li>接真实 `Codex app-server` 连接</li>
-                <li>补 `start` / `attach` 智能会话发现</li>
-                <li>把 Tools / Search / Skills 改成真实聚合数据</li>
+                <li>Session status: {session.status}</li>
+                <li>Pending action: {overview.pendingUserAction?.label ?? "none"}</li>
+                <li>Recent compactions: {context.recentCompactions.length}</li>
               </ul>
             </article>
           </section>
         </>
       )}
 
-      {activeTab === "Tools" && (
-        <section className="event-list">
-          {tools.map((item) => (
-            <article className="event-card" key={item.title}>
-              <div className="event-meta">
-                <span>{item.toolKind}</span>
-                <span>{item.status}</span>
-              </div>
-              <strong>{item.title}</strong>
-              <p>{item.reason}</p>
-              <small>{item.summary}</small>
-            </article>
-          ))}
-        </section>
-      )}
+      {activeTab === "Tools" &&
+        (tools.length > 0 ? (
+          <section className="event-list">
+            {tools.map((item) => (
+              <article className="event-card" key={`${item.title}-${item.startedAt}`}>
+                <div className="event-meta">
+                  <span>{item.toolKind}</span>
+                  <span>{item.status}</span>
+                </div>
+                <strong>{item.title}</strong>
+                <p>{item.reason}</p>
+                <small>{item.summary}</small>
+              </article>
+            ))}
+          </section>
+        ) : (
+          renderEmptyState("No tool sessions yet", "Bridge 已连上，但这一轮还没有聚合出工具会话卡片。")
+        ))}
 
-      {activeTab === "Search" && (
-        <section className="event-list">
-          {searches.map((item) => (
-            <article className="event-card" key={item.query}>
-              <div className="event-meta">
-                <span>search session</span>
-                <span>{item.inferredIndexing ? "inferred" : item.status}</span>
-              </div>
-              <strong>{item.query}</strong>
-              <p>{item.actions.join(" -> ")}</p>
-              <small>{item.summary}</small>
-            </article>
-          ))}
-        </section>
-      )}
+      {activeTab === "Search" &&
+        (searches.length > 0 ? (
+          <section className="event-list">
+            {searches.map((item) => (
+              <article className="event-card" key={`${item.query}-${item.startedAt}`}>
+                <div className="event-meta">
+                  <span>search session</span>
+                  <span>{item.inferredIndexing ? "inferred" : item.status}</span>
+                </div>
+                <strong>{item.query}</strong>
+                <p>{item.actions.join(" -> ") || "No recorded actions"}</p>
+                <small>{item.summary}</small>
+              </article>
+            ))}
+          </section>
+        ) : (
+          renderEmptyState("No search sessions yet", "当前会话还没有产生 Search 卡片，或 bridge 尚未聚合相关事件。")
+        ))}
 
-      {activeTab === "Skills" && (
-        <section className="event-list">
-          {skills.map((item) => (
-            <article className="event-card" key={item.skillName}>
-              <div className="event-meta">
-                <span>{item.source}</span>
-                <span>{formatLocalTime(item.timestamp)}</span>
-              </div>
-              <strong>{item.skillName}</strong>
-              <small>{item.status}</small>
-            </article>
-          ))}
-        </section>
-      )}
+      {activeTab === "Skills" &&
+        (skills.length > 0 ? (
+          <section className="event-list">
+            {skills.map((item) => (
+              <article className="event-card" key={`${item.skillName}-${item.timestamp}`}>
+                <div className="event-meta">
+                  <span>{item.source}</span>
+                  <span>{formatLocalTime(item.timestamp)}</span>
+                </div>
+                <strong>{item.skillName}</strong>
+                <small>{item.status}</small>
+              </article>
+            ))}
+          </section>
+        ) : (
+          renderEmptyState("No skill activations yet", "这一轮暂时还没有记录到实际触发的技能。")
+        ))}
 
-      {activeTab === "Memories" && (
-        <section className="event-list">
-          {memories.map((item) => (
-            <article className="event-card" key={item.sourceThreadId}>
-              <div className="event-meta">
-                <span>{item.sourceThreadId}</span>
-                <span>{item.usedByTurnId}</span>
-              </div>
-              <strong>{item.entries[0]?.title}</strong>
-              <small>{item.entries[0]?.excerpt}</small>
-            </article>
-          ))}
-        </section>
-      )}
+      {activeTab === "Memories" &&
+        (memories.length > 0 ? (
+          <section className="event-list">
+            {memories.map((item) => (
+              <article className="event-card" key={`${item.sourceThreadId}-${item.usedByTurnId}`}>
+                <div className="event-meta">
+                  <span>{item.sourceThreadId}</span>
+                  <span>{item.usedByTurnId}</span>
+                </div>
+                <strong>{item.entries[0]?.title ?? "Memory citation"}</strong>
+                <small>{item.entries[0]?.excerpt ?? "No excerpt recorded"}</small>
+              </article>
+            ))}
+          </section>
+        ) : (
+          renderEmptyState("No memory citations yet", "V1 只展示本轮真正引用到的 memory/citation。")
+        ))}
 
       {activeTab === "Context" && (
         <section className="panel-block two-column-grid">
@@ -289,9 +295,9 @@ export default function App(): React.JSX.Element {
               <span>Budget snapshot</span>
             </div>
             <ul>
-              <li>Used: {formatTokens(overview.contextBudget.usedTokens)}</li>
-              <li>Remaining: {formatTokens(overview.contextBudget.remainingTokens)}</li>
-              <li>Trend: {overview.contextBudget.growthTrend}</li>
+              <li>Used: {formatTokens(context.usedTokens)}</li>
+              <li>Remaining: {formatTokens(context.remainingTokens)}</li>
+              <li>Trend: {context.growthTrend}</li>
             </ul>
           </article>
           <article className="detail-card">
@@ -299,9 +305,11 @@ export default function App(): React.JSX.Element {
               <span>Compaction history</span>
             </div>
             <ul>
-              {overview.contextBudget.recentCompactions.map((item) => (
-                <li key={item}>{formatLocalTime(item)}</li>
-              ))}
+              {context.recentCompactions.length > 0 ? (
+                context.recentCompactions.map((item) => <li key={item}>{formatLocalTime(item)}</li>)
+              ) : (
+                <li>No compaction events yet</li>
+              )}
             </ul>
           </article>
         </section>

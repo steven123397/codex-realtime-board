@@ -89,3 +89,21 @@ export interface MemoryReferenceRecord {
   entries: MemoryReferenceEntry[];
   usedByTurnId: string;
 }
+
+export interface BoardStateSnapshot {
+  session: SessionSummary;
+  overview: OverviewSnapshot;
+  tools: ToolSessionCard[];
+  searches: SearchSessionCard[];
+  skills: SkillActivationRecord[];
+  memories: MemoryReferenceRecord[];
+  context: ContextSnapshot;
+}
+
+export type BridgeMode = "mock" | "live";
+
+export interface BridgeHealthSnapshot {
+  ok: true;
+  mode: BridgeMode;
+  message: string;
+}
