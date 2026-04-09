@@ -11,7 +11,7 @@
 - `appServerProtocol`、`appServerClient`、`websocketTransport` 这条底层协议接入链路
 - live / mock 两类 bridge 运行时来源
 - `bridgeState` 的归一化状态与派生视图
-- `/healthz`、`/api/state` 以及后续控制 API 的 HTTP 出口
+- `/healthz`、`/api/state`、`/api/state/sync` 以及后续控制 API 的 HTTP 出口
 - board-managed session 的活跃 / 最近会话索引与恢复入口
 
 ## 局部开发约定
@@ -21,6 +21,7 @@
 - `mock` 路径不是临时脚手架，而是 panel 和文档演示的重要保底路径；修改 live 行为时，评估 mock 是否也需要同步更新。
 - 新增控制 API 时，先想清楚“桥接控制面”和“状态读取面”的边界，不要把副作用操作塞进只读接口。
 - 涉及 session registry、恢复策略、多会话索引时，优先保证状态机清晰和错误路径可测，不要先做过度 UI 化的返回格式。
+- 继续推进 panel 的增量刷新路径时，优先从 bridge 侧增加 cursor / conditional sync 这类只读合同，不要让 panel 直接跨过 bridge 去消费底层事件流。
 
 ## 验证建议
 

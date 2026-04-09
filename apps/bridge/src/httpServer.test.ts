@@ -5,6 +5,7 @@ import type {
   AttachSessionResult,
   BoardStateSnapshot,
   BridgeHealthSnapshot,
+  BoardStateSyncResult,
   ManagedSessionListSnapshot,
   StartSessionResult
 } from "@codex-realtime-board/shared";
@@ -117,6 +118,24 @@ test("serves session list, targeted state queries, and control API responses", a
 
       return sessionId === "thread_requested" ? requestedState : null;
     },
+    getStateSync: (sessionId, since) => {
+      if (sessionId !== "thread_requested") {
+        return null;
+      }
+
+      if (since === "cursor_requested_v1") {
+        return {
+          kind: "unchanged",
+          cursor: "cursor_requested_v1"
+        };
+      }
+
+      return {
+        kind: "snapshot",
+        cursor: "cursor_requested_v1",
+        snapshot: requestedState
+      };
+    },
     listSessions: () => sessions,
     startSession: async () => startResult,
     attachSession: async () => attachResult
@@ -131,6 +150,24 @@ test("serves session list, targeted state queries, and control API responses", a
     assert.equal(targetedStateResponse.status, 200);
     const targetedState = (await targetedStateResponse.json()) as BoardStateSnapshot;
     assert.equal(targetedState.session.sessionId, "thread_requested");
+
+    const syncStateResponse = await fetch(`${server.baseUrl}/api/state/sync?sessionId=thread_requested`);
+    assert.equal(syncStateResponse.status, 200);
+    const syncState = (await syncStateResponse.json()) as BoardStateSyncResult;
+    assert.equal(syncState.kind, "snapshot");
+    if (syncState.kind === "snapshot") {
+      assert.equal(syncState.cursor, "cursor_requested_v1");
+      assert.equal(syncState.snapshot.session.sessionId, "thread_requested");
+    }
+
+    const unchangedResponse = await fetch(
+      `${server.baseUrl}/api/state/sync?sessionId=thread_requested&since=cursor_requested_v1`
+    );
+    assert.equal(unchangedResponse.status, 200);
+    assert.deepEqual((await unchangedResponse.json()) as BoardStateSyncResult, {
+      kind: "unchanged",
+      cursor: "cursor_requested_v1"
+    });
 
     const missingStateResponse = await fetch(`${server.baseUrl}/api/state?sessionId=missing`);
     assert.equal(missingStateResponse.status, 404);

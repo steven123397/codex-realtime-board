@@ -1,11 +1,19 @@
 import type {
   BoardStateSnapshot,
+  BoardStateSyncResult,
   ManagedSessionListSnapshot
 } from "@codex-realtime-board/shared";
 
 export interface LoadBoardStateOptions {
   baseUrl?: string;
   sessionId?: string | null;
+  fetchImpl?: typeof fetch;
+}
+
+export interface LoadBoardStateSyncOptions {
+  baseUrl?: string;
+  sessionId?: string | null;
+  since?: string | null;
   fetchImpl?: typeof fetch;
 }
 
@@ -77,6 +85,40 @@ export async function loadBoardState(options: LoadBoardStateOptions = {}): Promi
   }
 
   return (await response.json()) as BoardStateSnapshot;
+}
+
+export async function loadBoardStateSync(
+  options: LoadBoardStateSyncOptions = {}
+): Promise<BoardStateSyncResult> {
+  const baseUrl = createBaseUrl(options);
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const url = new URL(`${baseUrl}/api/state/sync`);
+  if (options.sessionId) {
+    url.searchParams.set("sessionId", options.sessionId);
+  }
+  if (options.since) {
+    url.searchParams.set("since", options.since);
+  }
+
+  const response = await fetchImpl(url);
+
+  if (!response.ok) {
+    const payload = await readErrorPayload(response);
+    if (payload && typeof payload === "object" && "error" in payload) {
+      throw new BridgeApiError(`Bridge request failed with status ${response.status}`, {
+        status: response.status,
+        code: typeof payload.error === "string" ? payload.error : null,
+        details: payload
+      });
+    }
+
+    throw new BridgeApiError(`Bridge request failed with status ${response.status}`, {
+      status: response.status,
+      details: payload
+    });
+  }
+
+  return (await response.json()) as BoardStateSyncResult;
 }
 
 export async function loadManagedSessions(

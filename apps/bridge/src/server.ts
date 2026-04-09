@@ -2,6 +2,7 @@ import type {
   AttachSessionRequest,
   AttachSessionResult,
   BoardStateSnapshot,
+  BoardStateSyncResult,
   BridgeHealthSnapshot,
   ContextSnapshot,
   ManagedSessionListSnapshot,
@@ -15,6 +16,7 @@ import { createSessionRegistry } from "./sessionRegistry.js";
 export interface BridgeServer {
   getHealth(): BridgeHealthSnapshot;
   getState(sessionId?: string | null): BoardStateSnapshot | null;
+  getStateSync(sessionId?: string | null, since?: string | null): BoardStateSyncResult | null;
   listSessions(): ManagedSessionListSnapshot;
   startSession(request: StartSessionRequest): Promise<StartSessionResult>;
   attachSession(request: AttachSessionRequest): Promise<AttachSessionResult>;
@@ -124,6 +126,9 @@ export function createMockBridgeServer(baseTime: Date = new Date()): BridgeServe
     },
     getState(sessionId) {
       return controlApi.getState(sessionId);
+    },
+    getStateSync(sessionId, since) {
+      return controlApi.getStateSync(sessionId, since);
     },
     listSessions() {
       return controlApi.listSessions();

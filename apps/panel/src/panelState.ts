@@ -2,6 +2,7 @@ import {
   PANEL_BRIDGE_URL_QUERY_PARAM,
   PANEL_SESSION_ID_QUERY_PARAM,
   type BoardStateSnapshot,
+  type BoardStateSyncResult,
   type ContextSnapshot,
   type ManagedSessionListSnapshot,
   type MemoryReferenceRecord,
@@ -15,13 +16,16 @@ import {
 import {
   BridgeApiError,
   loadBoardState,
+  loadBoardStateSync,
   loadManagedSessions,
   type LoadBoardStateOptions,
+  type LoadBoardStateSyncOptions,
   type LoadManagedSessionsOptions
 } from "./api.js";
 
 export type PanelSnapshotSource = "bridge" | "fallback" | "empty";
 export type PanelConnectionState = "live" | "stale" | "fallback" | "empty";
+export type PanelSyncCapability = "unknown" | "supported" | "unsupported";
 
 export interface PanelEmptyState {
   title: string;
@@ -38,6 +42,8 @@ export interface PanelSnapshot {
   staleSince: string | null;
   lastLiveAt: string | null;
   refreshFailures: number;
+  syncCursor: string | null;
+  syncCapability: PanelSyncCapability;
   sessions: ManagedSessionListSnapshot | null;
   sessionDirectoryError: string | null;
 }
@@ -45,6 +51,7 @@ export interface PanelSnapshot {
 export interface LoadPanelSnapshotOptions extends LoadBoardStateOptions {
   fallbackState?: BoardStateSnapshot;
   loadBoardStateImpl?: (options: LoadBoardStateOptions) => Promise<BoardStateSnapshot>;
+  loadBoardStateSyncImpl?: (options: LoadBoardStateSyncOptions) => Promise<BoardStateSyncResult>;
   loadSessionsImpl?: (options: LoadManagedSessionsOptions) => Promise<ManagedSessionListSnapshot>;
   previousSnapshot?: PanelSnapshot | null;
 }
@@ -72,6 +79,17 @@ export interface PanelPoller {
 
 export const PANEL_AUTO_REFRESH_INTERVAL_MS = 5_000;
 
+interface LoadedBoardState {
+  board: BoardStateSnapshot;
+  syncCursor: string | null;
+  syncCapability: PanelSyncCapability;
+}
+
+interface BoardLoadFailure {
+  error: unknown;
+  syncCapability: PanelSyncCapability;
+}
+
 function minutesAgo(baseTime: Date, minutes: number): string {
   return new Date(baseTime.getTime() - minutes * 60_000).toISOString();
 }
@@ -86,6 +104,14 @@ function normalizeError(error: unknown): string {
   }
 
   return "Unknown bridge error";
+}
+
+function isBoardLoadFailure(error: unknown): error is BoardLoadFailure {
+  return Boolean(error && typeof error === "object" && "error" in error && "syncCapability" in error);
+}
+
+function isSyncEndpointUnavailable(error: unknown): boolean {
+  return error instanceof BridgeApiError && error.status === 404 && error.code === "not_found";
 }
 
 function createLoadedAt(): string {
@@ -267,6 +293,8 @@ function createPanelSnapshot(
     staleSince?: string | null;
     lastLiveAt?: string | null;
     refreshFailures?: number;
+    syncCursor?: string | null;
+    syncCapability?: PanelSyncCapability;
     sessions?: ManagedSessionListSnapshot | null;
     sessionDirectoryError?: string | null;
   }
@@ -281,6 +309,8 @@ function createPanelSnapshot(
     staleSince: options.staleSince ?? null,
     lastLiveAt: options.lastLiveAt ?? null,
     refreshFailures: options.refreshFailures ?? 0,
+    syncCursor: options.syncCursor ?? null,
+    syncCapability: options.syncCapability ?? "unknown",
     sessions: options.sessions ?? null,
     sessionDirectoryError: options.sessionDirectoryError ?? null
   };
@@ -310,7 +340,8 @@ function createMissingSessionSnapshot(
   sessionId: string,
   loadedAt: string,
   sessions: ManagedSessionListSnapshot | null,
-  sessionDirectoryError: string | null
+  sessionDirectoryError: string | null,
+  syncCapability: PanelSyncCapability
 ): PanelSnapshot {
   return {
     board: createEmptyBoardState(sessionId, "Session not found", "error"),
@@ -325,6 +356,8 @@ function createMissingSessionSnapshot(
     staleSince: null,
     lastLiveAt: null,
     refreshFailures: 0,
+    syncCursor: null,
+    syncCapability,
     sessions,
     sessionDirectoryError
   };
@@ -333,7 +366,8 @@ function createMissingSessionSnapshot(
 function createNoSelectionSnapshot(
   loadedAt: string,
   sessions: ManagedSessionListSnapshot | null,
-  sessionDirectoryError: string | null
+  sessionDirectoryError: string | null,
+  syncCapability: PanelSyncCapability
 ): PanelSnapshot {
   return {
     board: createEmptyBoardState("session_unselected", "No board-managed session selected", "idle"),
@@ -348,22 +382,91 @@ function createNoSelectionSnapshot(
     staleSince: null,
     lastLiveAt: null,
     refreshFailures: 0,
+    syncCursor: null,
+    syncCapability,
     sessions,
     sessionDirectoryError
   };
+}
+
+async function loadBoardWithConditionalSync(
+  options: {
+    loadOptions: LoadBoardStateOptions;
+    previousSnapshot: PanelSnapshot | null;
+    loadBoardStateImpl: (options: LoadBoardStateOptions) => Promise<BoardStateSnapshot>;
+    loadBoardStateSyncImpl: (options: LoadBoardStateSyncOptions) => Promise<BoardStateSyncResult>;
+  }
+): Promise<LoadedBoardState> {
+  let syncCapability: PanelSyncCapability = options.previousSnapshot?.syncCapability ?? "unknown";
+  const shouldTrySync = options.previousSnapshot?.syncCapability !== "unsupported";
+
+  if (shouldTrySync) {
+    try {
+      const syncResult = await options.loadBoardStateSyncImpl({
+        baseUrl: options.loadOptions.baseUrl,
+        sessionId: options.loadOptions.sessionId,
+        since: options.previousSnapshot?.syncCursor
+      });
+      syncCapability = "supported";
+
+      if (syncResult.kind === "unchanged") {
+        if (!options.previousSnapshot) {
+          throw new Error("Bridge sync returned unchanged without a previous snapshot");
+        }
+
+        return {
+          board: options.previousSnapshot.board,
+          syncCursor: syncResult.cursor,
+          syncCapability
+        };
+      }
+
+      return {
+        board: syncResult.snapshot,
+        syncCursor: syncResult.cursor,
+        syncCapability
+      };
+    } catch (error) {
+      if (isSyncEndpointUnavailable(error)) {
+        syncCapability = "unsupported";
+      }
+    }
+  } else {
+    syncCapability = "unsupported";
+  }
+
+  try {
+    const board = await options.loadBoardStateImpl(options.loadOptions);
+    return {
+      board,
+      syncCursor: null,
+      syncCapability
+    };
+  } catch (error) {
+    throw {
+      error,
+      syncCapability
+    } satisfies BoardLoadFailure;
+  }
 }
 
 export async function loadPanelSnapshot(options: LoadPanelSnapshotOptions = {}): Promise<PanelSnapshot> {
   const {
     fallbackState = createDemoBoardState(),
     loadBoardStateImpl = loadBoardState,
+    loadBoardStateSyncImpl = loadBoardStateSync,
     loadSessionsImpl = loadManagedSessions,
     previousSnapshot = null,
     ...loadOptions
   } = options;
   const loadedAt = createLoadedAt();
   const [boardResult, sessionsResult] = await Promise.allSettled([
-    loadBoardStateImpl(loadOptions),
+    loadBoardWithConditionalSync({
+      loadOptions,
+      previousSnapshot,
+      loadBoardStateImpl,
+      loadBoardStateSyncImpl
+    }),
     loadSessionsImpl({
       baseUrl: loadOptions.baseUrl
     })
@@ -371,24 +474,39 @@ export async function loadPanelSnapshot(options: LoadPanelSnapshotOptions = {}):
   const { sessions, sessionDirectoryError } = resolveSessionsResult(sessionsResult, previousSnapshot);
 
   if (boardResult.status === "fulfilled") {
-    return createPanelSnapshot(boardResult.value, {
+    return createPanelSnapshot(boardResult.value.board, {
       source: "bridge",
       connectionState: "live",
       loadedAt,
       lastLiveAt: loadedAt,
+      syncCursor: boardResult.value.syncCursor,
+      syncCapability: boardResult.value.syncCapability,
       sessions,
       sessionDirectoryError
     });
   }
 
-  const error = boardResult.reason;
+  const failure = isBoardLoadFailure(boardResult.reason)
+    ? boardResult.reason
+    : {
+        error: boardResult.reason,
+        syncCapability: previousSnapshot?.syncCapability ?? "unknown"
+      };
+  const error = failure.error;
+  const syncCapability = failure.syncCapability;
 
   if (error instanceof BridgeApiError && error.status === 404) {
     if (loadOptions.sessionId && error.code === "session_not_found") {
-      return createMissingSessionSnapshot(loadOptions.sessionId, loadedAt, sessions, sessionDirectoryError);
+      return createMissingSessionSnapshot(
+        loadOptions.sessionId,
+        loadedAt,
+        sessions,
+        sessionDirectoryError,
+        syncCapability
+      );
     }
 
-    return createNoSelectionSnapshot(loadedAt, sessions, sessionDirectoryError);
+    return createNoSelectionSnapshot(loadedAt, sessions, sessionDirectoryError, syncCapability);
   }
 
   if (hasPreviousLiveSnapshot(previousSnapshot)) {
@@ -400,6 +518,8 @@ export async function loadPanelSnapshot(options: LoadPanelSnapshotOptions = {}):
       staleSince: previousSnapshot.staleSince ?? loadedAt,
       lastLiveAt: previousSnapshot.lastLiveAt,
       refreshFailures: previousSnapshot.refreshFailures + 1,
+      syncCursor: previousSnapshot.syncCursor,
+      syncCapability,
       sessions: sessions ?? previousSnapshot.sessions,
       sessionDirectoryError
     });
@@ -410,6 +530,7 @@ export async function loadPanelSnapshot(options: LoadPanelSnapshotOptions = {}):
     connectionState: "fallback",
     loadedAt,
     errorMessage: normalizeError(error),
+    syncCapability,
     sessions,
     sessionDirectoryError
   });

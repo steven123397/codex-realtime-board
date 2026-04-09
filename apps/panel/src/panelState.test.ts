@@ -28,6 +28,8 @@ function createPanelSnapshot(sessionId: string) {
     staleSince: null,
     lastLiveAt: new Date("2026-04-08T12:00:00.000Z").toISOString(),
     refreshFailures: 0,
+    syncCursor: "cursor_initial",
+    syncCapability: "supported" as const,
     sessions: null,
     sessionDirectoryError: null
   };
@@ -110,6 +112,11 @@ test("loads live board state when bridge request succeeds", async () => {
 
   const result = await loadPanelSnapshot({
     baseUrl: "http://127.0.0.1:4317",
+    loadBoardStateSyncImpl: async () => ({
+      kind: "snapshot",
+      cursor: "cursor_a",
+      snapshot: bridgeState
+    }),
     loadBoardStateImpl: async (options) => {
       assert.equal(options.baseUrl, "http://127.0.0.1:4317");
       return bridgeState;
@@ -129,6 +136,8 @@ test("loads live board state when bridge request succeeds", async () => {
   assert.equal(result.lastLiveAt, result.loadedAt);
   assert.equal(result.refreshFailures, 0);
   assert.equal(result.staleSince, null);
+  assert.equal(result.syncCursor, "cursor_a");
+  assert.equal(result.syncCapability, "supported");
   assert.ok(Date.parse(result.loadedAt) > 0);
 });
 
@@ -137,6 +146,13 @@ test("falls back to demo board state when bridge request fails", async () => {
 
   const result = await loadPanelSnapshot({
     fallbackState,
+    loadBoardStateSyncImpl: async () => {
+      throw new BridgeApiError("Bridge request failed with status 404", {
+        status: 404,
+        code: "not_found",
+        details: null
+      });
+    },
     loadBoardStateImpl: async () => {
       throw new Error("Bridge state request failed with status 500");
     },
@@ -149,11 +165,20 @@ test("falls back to demo board state when bridge request fails", async () => {
   assert.equal(result.board.session.sessionId, "session_local_demo");
   assert.match(result.errorMessage ?? "", /status 500/);
   assert.deepEqual(result.board, fallbackState);
+  assert.equal(result.syncCursor, null);
+  assert.equal(result.syncCapability, "unsupported");
 });
 
 test("returns an empty snapshot when the requested session is missing", async () => {
   const result = await loadPanelSnapshot({
     sessionId: "missing_session",
+    loadBoardStateSyncImpl: async () => {
+      throw new BridgeApiError("Bridge request failed with status 404", {
+        status: 404,
+        code: "not_found",
+        details: null
+      });
+    },
     loadBoardStateImpl: async () => {
       throw new BridgeApiError("Bridge request failed with status 404", {
         status: 404,
@@ -172,6 +197,7 @@ test("returns an empty snapshot when the requested session is missing", async ()
   assert.equal(result.board.session.sessionId, "missing_session");
   assert.match(result.emptyState?.title ?? "", /Session not found/);
   assert.match(result.emptyState?.body ?? "", /missing_session/);
+  assert.equal(result.syncCapability, "unsupported");
 });
 
 test("parses session and bridge targets from panel URL search params", () => {
@@ -198,6 +224,76 @@ test("builds panel URL search params when switching sessions", () => {
     sessionId: "session_new",
     baseUrl: "http://127.0.0.1:4317"
   });
+});
+
+test("reuses the previous board snapshot when conditional sync reports unchanged", async () => {
+  const previousSnapshot = {
+    ...createPanelSnapshot("session_sync"),
+    loadedAt: "2026-04-08T12:00:00.000Z",
+    lastLiveAt: "2026-04-08T12:00:00.000Z",
+    syncCursor: "cursor_sync_1"
+  };
+
+  const result = await loadPanelSnapshot({
+    previousSnapshot,
+    sessionId: "session_sync",
+    loadBoardStateSyncImpl: async (options) => {
+      assert.equal(options.sessionId, "session_sync");
+      assert.equal(options.since, "cursor_sync_1");
+      return {
+        kind: "unchanged",
+        cursor: "cursor_sync_1"
+      };
+    },
+    loadBoardStateImpl: async () => {
+      throw new Error("full snapshot should not be loaded when sync is unchanged");
+    },
+    loadSessionsImpl: async () => createManagedSessions("session_sync")
+  });
+
+  assert.equal(result.source, "bridge");
+  assert.equal(result.connectionState, "live");
+  assert.equal(result.board.session.sessionId, "session_sync");
+  assert.equal(result.syncCursor, "cursor_sync_1");
+  assert.equal(result.syncCapability, "supported");
+  assert.notEqual(result.loadedAt, previousSnapshot.loadedAt);
+  assert.equal(result.lastLiveAt, result.loadedAt);
+});
+
+test("falls back to full snapshot loading when the conditional sync endpoint is unavailable", async () => {
+  const bridgeState = createDemoBoardState(new Date("2026-04-08T12:05:00.000Z"));
+  let syncAttempts = 0;
+  let fullLoadCount = 0;
+
+  const result = await loadPanelSnapshot({
+    previousSnapshot: {
+      ...createPanelSnapshot("session_sync"),
+      syncCursor: "cursor_sync_1",
+      syncCapability: "unknown"
+    },
+    sessionId: "session_sync",
+    loadBoardStateSyncImpl: async () => {
+      syncAttempts += 1;
+      throw new BridgeApiError("Bridge request failed with status 404", {
+        status: 404,
+        code: "not_found",
+        details: null
+      });
+    },
+    loadBoardStateImpl: async () => {
+      fullLoadCount += 1;
+      return bridgeState;
+    },
+    loadSessionsImpl: async () => createManagedSessions("session_sync")
+  });
+
+  assert.equal(syncAttempts, 1);
+  assert.equal(fullLoadCount, 1);
+  assert.equal(result.source, "bridge");
+  assert.equal(result.connectionState, "live");
+  assert.deepEqual(result.board, bridgeState);
+  assert.equal(result.syncCapability, "unsupported");
+  assert.equal(result.syncCursor, null);
 });
 
 test("builds overview timeline from board state instead of static copy", () => {
@@ -352,4 +448,6 @@ test("keeps the last live snapshot visible when a refresh falls back to reconnec
   assert.ok(result.staleSince);
   assert.deepEqual(result.sessions, sessions);
   assert.match(result.errorMessage ?? "", /status 503/);
+  assert.equal(result.syncCursor, previousSnapshot.syncCursor);
+  assert.equal(result.syncCapability, "supported");
 });

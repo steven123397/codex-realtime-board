@@ -3,6 +3,7 @@ import {
   PANEL_SESSION_ID_QUERY_PARAM,
   type AttachSessionRequest,
   type AttachSessionResult,
+  type BoardStateSyncResult,
   type ManagedSessionListSnapshot,
   type StartSessionRequest,
   type StartSessionResult
@@ -13,6 +14,7 @@ import type { SessionRegistry } from "./sessionRegistry.js";
 
 export interface BridgeControlApi {
   getState(sessionId?: string | null): BoardStateSnapshot | null;
+  getStateSync(sessionId?: string | null, since?: string | null): BoardStateSyncResult | null;
   listSessions(): ManagedSessionListSnapshot;
   startSession(request: StartSessionRequest): Promise<StartSessionResult>;
   attachSession(request: AttachSessionRequest): Promise<AttachSessionResult>;
@@ -40,6 +42,9 @@ export function createBridgeControlApi(options: BridgeControlApiOptions): Bridge
   return {
     getState(sessionId) {
       return options.registry.getState(sessionId);
+    },
+    getStateSync(sessionId, since) {
+      return options.registry.getStateSync(sessionId, since);
     },
     listSessions() {
       return options.registry.listSessions();

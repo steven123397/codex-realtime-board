@@ -273,6 +273,15 @@ panel 只消费这些稳定控制 / 状态合同，而不直接绑定底层 `app
 - 在 bridge 对外合同保持稳定前，不让 panel 直接订阅底层 `app-server` 事件面。
 - 后续如果要从 snapshot 轮询继续升级，也优先评估 bridge 侧的 cursor / delta / SSE 路径，而不是让 panel 越过 bridge 直接接底层协议。
 
+当前已经落地的下一小步是一个“条件同步”合同，而不是真正的细粒度 delta：
+
+- bridge 新增带 `since` cursor 的只读同步端点 `GET /api/state/sync`。
+- 若目标会话自上次 cursor 以来没有变化，则只返回 `unchanged + cursor`。
+- 若有变化，则返回 `snapshot + cursor`，仍沿用现有共享快照合同。
+- panel 优先消费这条条件同步路径；如果目标 bridge 还不支持该端点，再安全退回 `GET /api/state`。
+
+这样可以先降低无变化轮询的重复传输成本，同时保持合同简单、兼容旧 bridge，并为后续真正的 delta / push 升级留出空间。
+
 ## 6. 本地已验证的协议信号
 
 基于本机 `codex-cli 0.118.0` 的实际检查，已经确认 `app-server` 具备较完整的结构化事件面。

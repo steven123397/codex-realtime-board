@@ -57,6 +57,19 @@ function formatTokens(value: number): string {
   return new Intl.NumberFormat("en-US").format(value);
 }
 
+function formatSyncEndpoint(sessionId: string | null, syncCursor: string | null): string {
+  const params = new URLSearchParams();
+  if (sessionId) {
+    params.set("sessionId", sessionId);
+  }
+  if (syncCursor) {
+    params.set("since", syncCursor);
+  }
+
+  const query = params.toString();
+  return query.length > 0 ? `GET /api/state/sync?${query}` : "GET /api/state/sync";
+}
+
 function renderList(title: string, items: string[]): React.JSX.Element {
   return (
     <section className="panel-block">
@@ -316,6 +329,8 @@ export default function App(): React.JSX.Element {
     staleSince: null,
     lastLiveAt: null,
     refreshFailures: 0,
+    syncCursor: null,
+    syncCapability: "unknown",
     sessions: null,
     sessionDirectoryError: null
   }));
@@ -540,6 +555,7 @@ export default function App(): React.JSX.Element {
                   Bridge endpoint: `GET /api/state`
                   {panelTarget.sessionId ? `?sessionId=${panelTarget.sessionId}` : ""}
                 </li>
+                <li>Sync endpoint: `{formatSyncEndpoint(panelTarget.sessionId, panelSnapshot.syncCursor)}`</li>
                 <li>Session directory: `GET /api/sessions`</li>
                 <li>Health endpoint: `GET /healthz`</li>
               </ul>
@@ -560,9 +576,16 @@ export default function App(): React.JSX.Element {
                 <span>Incremental path</span>
               </div>
               <ul>
-                <li>Current path: fixed-interval `/api/state` snapshot polling</li>
+                <li>
+                  Current path:{" "}
+                  {panelSnapshot.syncCapability === "supported"
+                    ? "cursor-based `GET /api/state/sync` conditional refresh"
+                    : "fixed-interval `GET /api/state` snapshot polling"}
+                </li>
+                <li>Sync capability: {panelSnapshot.syncCapability}</li>
+                <li>Sync cursor: {panelSnapshot.syncCursor ?? "not available"}</li>
                 <li>Preserve last live snapshot before falling back to demo</li>
-                <li>Next candidate: bridge-side cursor / delta endpoint</li>
+                <li>Next candidate: bridge-side delta or push upgrade on top of cursor sync</li>
                 <li>Push upgrade stays inside bridge, not panel direct protocol access</li>
               </ul>
             </article>

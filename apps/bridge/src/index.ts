@@ -2,6 +2,7 @@ import type {
   AttachSessionRequest,
   AttachSessionResult,
   BoardStateSnapshot,
+  BoardStateSyncResult,
   BridgeHealthSnapshot,
   ManagedSessionListSnapshot,
   StartSessionRequest,
@@ -16,6 +17,7 @@ import { createMockBridgeServer } from "./server.js";
 interface RuntimeStateSource {
   getHealth(): BridgeHealthSnapshot;
   getState(sessionId?: string | null): BoardStateSnapshot | null;
+  getStateSync(sessionId?: string | null, since?: string | null): BoardStateSyncResult | null;
   listSessions(): ManagedSessionListSnapshot;
   startSession(request: StartSessionRequest): Promise<StartSessionResult>;
   attachSession(request: AttachSessionRequest): Promise<AttachSessionResult>;
@@ -77,6 +79,7 @@ async function run(): Promise<void> {
     source = {
       getHealth: () => mockBridge.getHealth(),
       getState: (sessionId) => mockBridge.getState(sessionId),
+      getStateSync: (sessionId, since) => mockBridge.getStateSync(sessionId, since),
       listSessions: () => mockBridge.listSessions(),
       startSession: (request) => mockBridge.startSession(request),
       attachSession: (request) => mockBridge.attachSession(request)
@@ -140,6 +143,7 @@ async function run(): Promise<void> {
     source = {
       getHealth: () => liveBridge.getHealth(),
       getState: (sessionId) => liveBridge.controlApi.getState(sessionId),
+      getStateSync: (sessionId, since) => liveBridge.controlApi.getStateSync(sessionId, since),
       listSessions: () => liveBridge.controlApi.listSessions(),
       startSession: (request) => liveBridge.controlApi.startSession(request),
       attachSession: (request) => liveBridge.controlApi.attachSession(request)
@@ -151,6 +155,7 @@ async function run(): Promise<void> {
     port: bridgePort,
     getHealth: () => source.getHealth(),
     getState: (sessionId) => source.getState(sessionId),
+    getStateSync: (sessionId, since) => source.getStateSync(sessionId, since),
     listSessions: () => source.listSessions(),
     startSession: (request) => source.startSession(request),
     attachSession: (request) => source.attachSession(request)
@@ -161,6 +166,7 @@ async function run(): Promise<void> {
   console.log(`[bridge] health endpoint ${httpServer.baseUrl}/healthz`);
   console.log(`[bridge] sessions endpoint ${httpServer.baseUrl}/api/sessions`);
   console.log(`[bridge] state endpoint ${httpServer.baseUrl}/api/state`);
+  console.log(`[bridge] sync endpoint ${httpServer.baseUrl}/api/state/sync`);
 
   await keepAlive();
 }

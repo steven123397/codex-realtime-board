@@ -100,6 +100,19 @@ export interface BoardStateSnapshot {
   context: ContextSnapshot;
 }
 
+export interface BoardStateSyncSnapshotResult {
+  kind: "snapshot";
+  cursor: string;
+  snapshot: BoardStateSnapshot;
+}
+
+export interface BoardStateSyncUnchangedResult {
+  kind: "unchanged";
+  cursor: string;
+}
+
+export type BoardStateSyncResult = BoardStateSyncSnapshotResult | BoardStateSyncUnchangedResult;
+
 export type BridgeMode = "mock" | "live";
 
 export interface BridgeHealthSnapshot {

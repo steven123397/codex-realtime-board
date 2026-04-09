@@ -9,6 +9,7 @@ import type {
   AttachSessionRequest,
   AttachSessionResult,
   BoardStateSnapshot,
+  BoardStateSyncResult,
   BridgeHealthSnapshot,
   ManagedSessionListSnapshot,
   StartSessionRequest,
@@ -20,6 +21,7 @@ export interface BridgeHttpServerOptions {
   port: number;
   getHealth(): BridgeHealthSnapshot;
   getState(sessionId?: string | null): BoardStateSnapshot | null;
+  getStateSync?(sessionId?: string | null, since?: string | null): BoardStateSyncResult | null;
   listSessions?(): ManagedSessionListSnapshot;
   startSession?(request: StartSessionRequest): Promise<StartSessionResult>;
   attachSession?(request: AttachSessionRequest): Promise<AttachSessionResult>;
@@ -65,6 +67,22 @@ export async function createBridgeHttpServer(options: BridgeHttpServerOptions): 
 
     if (request.method === "GET" && url.pathname === "/api/sessions" && options.listSessions) {
       writeJson(response, 200, options.listSessions());
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/state/sync" && options.getStateSync) {
+      const sessionId = url.searchParams.get("sessionId");
+      const since = url.searchParams.get("since");
+      const result = options.getStateSync(sessionId, since);
+      if (!result) {
+        writeJson(response, 404, {
+          error: "session_not_found",
+          sessionId
+        });
+        return;
+      }
+
+      writeJson(response, 200, result);
       return;
     }
 

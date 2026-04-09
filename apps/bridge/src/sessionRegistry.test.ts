@@ -55,3 +55,31 @@ test("returns the selected snapshot by default and reports missing sessions", ()
   assert.equal(registry.getState("session_running")?.session.sessionId, "session_running");
   assert.equal(registry.getState("missing"), null);
 });
+
+test("returns cursor-based sync results for unchanged and updated sessions", () => {
+  const registry = createSessionRegistry();
+  registry.upsertState(createSnapshot("session_running", "running", "2026-04-09T10:30:00.000Z"));
+
+  const initial = registry.getStateSync("session_running");
+  assert.ok(initial);
+  assert.equal(initial?.kind, "snapshot");
+  assert.equal(initial?.snapshot.session.sessionId, "session_running");
+  assert.match(initial?.cursor ?? "", /^cursor_/);
+
+  const unchanged = registry.getStateSync("session_running", initial?.cursor ?? null);
+  assert.deepEqual(unchanged, {
+    kind: "unchanged",
+    cursor: initial?.cursor
+  });
+
+  registry.upsertState(
+    createSnapshot("session_running", "waiting-user", "2026-04-09T10:45:00.000Z", "Updated session")
+  );
+
+  const updated = registry.getStateSync("session_running", initial?.cursor ?? null);
+  assert.ok(updated);
+  assert.equal(updated?.kind, "snapshot");
+  assert.notEqual(updated?.cursor, initial?.cursor);
+  assert.equal(updated?.snapshot.session.title, "Updated session");
+  assert.equal(updated?.snapshot.session.status, "waiting-user");
+});
