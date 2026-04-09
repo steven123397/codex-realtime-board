@@ -2,6 +2,17 @@
 
 本文件用于归档已经完成、且不再保留为活跃计划的实现计划。
 
+## 2026-04-09 sync-empty-state-contract
+
+- 完成时间：2026-04-09
+- 对应设计：`../design/2026-04-06-codex-realtime-board-v1-design.md`
+- 完成内容：
+  - 在共享合同中补齐 `state` / `sync` 读取面的空态错误语义，明确区分 `no_session_selected` 与 `session_not_found`。
+  - 让 bridge 的 `/api/state` 与 `/api/state/sync` HTTP 返回体直接暴露这两类 typed 404，而不是统一压成模糊的 `session_not_found`。
+  - 让 panel 在 `sync` 端点已经明确返回空态时直接收口到空视图，不再额外回退一轮完整 snapshot 请求。
+- 过程摘要：
+  - 这一轮没有直接跳到 delta / SSE，而是先把条件同步读路径的空态合同补齐，降低 panel 的多余回源并为后续增量升级打稳错误语义基础。
+
 ## 2026-04-08 start-attach-orchestration
 
 - 完成时间：2026-04-09

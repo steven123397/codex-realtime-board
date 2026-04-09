@@ -278,6 +278,8 @@ panel 只消费这些稳定控制 / 状态合同，而不直接绑定底层 `app
 - bridge 新增带 `since` cursor 的只读同步端点 `GET /api/state/sync`。
 - 若目标会话自上次 cursor 以来没有变化，则只返回 `unchanged + cursor`。
 - 若有变化，则返回 `snapshot + cursor`，仍沿用现有共享快照合同。
+- 当读取面不存在目标会话时，`GET /api/state` 与 `GET /api/state/sync` 都应明确区分 `no_session_selected` 与 `session_not_found`，而不是把两类空态都压成同一种模糊 404。
+- 当 `sync` 端点已经明确返回上述空态时，panel 直接收口为空态，不再为了判断“未选定”还是“会话缺失”而额外回退一轮完整 `GET /api/state`。
 - panel 优先消费这条条件同步路径；如果目标 bridge 还不支持该端点，再安全退回 `GET /api/state`。
 
 这样可以先降低无变化轮询的重复传输成本，同时保持合同简单、兼容旧 bridge，并为后续真正的 delta / push 升级留出空间。

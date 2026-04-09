@@ -58,6 +58,24 @@ test("runs the start command through the bridge control path", async () => {
   assert.match(logs.join("\n"), /session_started/);
 });
 
+test("ignores a leading pnpm argument separator before dispatching commands", async () => {
+  const receivedArgs: string[][] = [];
+
+  const exitCode = await runCli(["--", "start", "Summarize the current workspace"], {
+    io: {
+      log() {},
+      error() {}
+    },
+    runStartCommand: async (args) => {
+      receivedArgs.push(args);
+      return 0;
+    }
+  });
+
+  assert.equal(exitCode, 0);
+  assert.deepEqual(receivedArgs, [["Summarize the current workspace"]]);
+});
+
 test("shows selection guidance when attach needs an explicit session id", async () => {
   const logs: string[] = [];
   const attachResult: AttachSessionResult = {

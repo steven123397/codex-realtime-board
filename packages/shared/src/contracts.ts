@@ -111,6 +111,13 @@ export interface BoardStateSyncUnchangedResult {
   cursor: string;
 }
 
+export type BoardStateQueryErrorCode = "session_not_found" | "no_session_selected";
+
+export interface BoardStateQueryErrorResponse {
+  error: BoardStateQueryErrorCode;
+  sessionId: string | null;
+}
+
 export type BoardStateSyncResult = BoardStateSyncSnapshotResult | BoardStateSyncUnchangedResult;
 
 export type BridgeMode = "mock" | "live";

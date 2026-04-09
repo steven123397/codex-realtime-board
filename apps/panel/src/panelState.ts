@@ -114,6 +114,14 @@ function isSyncEndpointUnavailable(error: unknown): boolean {
   return error instanceof BridgeApiError && error.status === 404 && error.code === "not_found";
 }
 
+function isSyncTerminalStateError(error: unknown): boolean {
+  return (
+    error instanceof BridgeApiError &&
+    error.status === 404 &&
+    (error.code === "session_not_found" || error.code === "no_session_selected")
+  );
+}
+
 function createLoadedAt(): string {
   return new Date().toISOString();
 }
@@ -427,6 +435,13 @@ async function loadBoardWithConditionalSync(
         syncCapability
       };
     } catch (error) {
+      if (isSyncTerminalStateError(error)) {
+        throw {
+          error,
+          syncCapability: "supported"
+        } satisfies BoardLoadFailure;
+      }
+
       if (isSyncEndpointUnavailable(error)) {
         syncCapability = "unsupported";
       }

@@ -3,8 +3,9 @@
 ## 关联文档
 
 - 相关设计：`../design/2026-04-06-codex-realtime-board-v1-design.md`
-- 最新完成计划：`../plan/history_plan.md#2026-04-09-attach-interactive-selector`
-- 上一轮完成计划：`../plan/history_plan.md#2026-04-09-launcher-lifecycle-orchestration`
+- 最新完成计划：`../plan/history_plan.md#2026-04-09-sync-empty-state-contract`
+- 上一轮完成计划：`../plan/history_plan.md#2026-04-09-attach-interactive-selector`
+- 更早完成计划：`../plan/history_plan.md#2026-04-09-launcher-lifecycle-orchestration`
 - 更早完成计划：`../plan/history_plan.md#2026-04-08-start-attach-orchestration`
 - 更早历史计划：`../plan/history_plan.md#2026-04-08-bootstrap-monorepo-skeleton`
 
@@ -18,10 +19,10 @@
 
 - 已落地 `pnpm workspace + TypeScript` monorepo 骨架，以及 `apps/cli`、`apps/bridge`、`apps/panel`、`packages/shared` 四个主模块边界。
 - `packages/shared` 已承载 `V1_PRIMARY_TABS`、会话摘要、工具卡片、搜索卡片、记忆引用、上下文预算、bridge 健康快照，以及 `start / attach` 所需的会话管理合同与 panel 查询参数常量。
-- `apps/bridge` 已具备 mock / live 双路径、`app-server` WebSocket transport、多会话状态归一化、board-managed session registry，以及 `/healthz`、`/api/sessions`、`/api/state`、`/api/state/sync`、`/api/session/start`、`/api/session/attach` 控制出口。
+- `apps/bridge` 已具备 mock / live 双路径、`app-server` WebSocket transport、多会话状态归一化、board-managed session registry，以及 `/healthz`、`/api/sessions`、`/api/state`、`/api/state/sync`、`/api/session/start`、`/api/session/attach` 控制出口；其中 `state` / `sync` 读取面已经明确区分 `no_session_selected` 与 `session_not_found` 两类空目标语义。
 - `apps/cli` 已从占位输出推进到真实控制路径：会先确保本地 `app-server`、bridge 和 panel 运行时可用，再通过 bridge 控制面执行 `start` / `attach`，并输出目标 panel URL。
 - `apps/cli` 的 `attach` 当前已具备最小交互式选择器：多 active 或 recent 回退时，会在终端里列出编号并允许直接选择目标会话。
-- `apps/panel` 已能根据 URL 中的目标 `sessionId` 与 `bridgeUrl` 轮询指定快照，并同步读取 `/api/sessions` 暴露运行中会话目录；当前会优先通过 `/api/state/sync` 进行 cursor 条件同步，在无变化场景下避免重复搬运整份 snapshot，同时保留最近同步时间、手动刷新、stale / reconnect 反馈，以及运行中会话切换。bridge 完全不可用时回退 demo state，目标会话缺失或未选定时转为明确空态。
+- `apps/panel` 已能根据 URL 中的目标 `sessionId` 与 `bridgeUrl` 轮询指定快照，并同步读取 `/api/sessions` 暴露运行中会话目录；当前会优先通过 `/api/state/sync` 进行 cursor 条件同步，在无变化场景下避免重复搬运整份 snapshot，同时保留最近同步时间、手动刷新、stale / reconnect 反馈，以及运行中会话切换。对于会话缺失或未选定这类空态，panel 现在会直接消费 bridge 的 typed 404 语义，不再先回退一轮完整 `GET /api/state` 再判断空态；bridge 完全不可用时才退回 demo state。
 - 当前门禁已经覆盖 shared 合同、bridge session registry / control API、CLI orchestrator、launcher 运行时编排，以及 panel 的按会话加载与衍生状态。
 
 ## 关键历史节点
@@ -36,12 +37,13 @@
 - `2026-04-09`：完成 panel 首轮实时化，把一次性 snapshot 加载推进到 bridge 轮询 + 手动刷新视图。
 - `2026-04-09`：完成 panel 第二轮实时化，把 stale / reconnect 反馈、运行中会话切换与 session directory 读取补齐到 companion 视图。
 - `2026-04-09`：完成 bridge 条件同步合同的首轮实现，新增 `/api/state/sync` cursor 端点，并让 panel 优先走这条增量刷新路径。
+- `2026-04-09`：完成 `state` / `sync` 空态合同补强，bridge 现已明确区分 `no_session_selected` 与 `session_not_found`，panel 也会直接消费这两类结果。
 
 ## 当前仍然有效的风险 / 限制
 
 - launcher 当前只负责“确保可用并按需拉起”，还没有持久化 runtime manifest、PID 管理或统一清理旧进程。
 - `attach` 选择器当前仍是最小终端交互：支持一次编号 / session id 选择，但还没有方向键导航、分页或更丰富的筛选能力。
-- `apps/panel` 当前虽然已经接入 bridge 侧 cursor 条件同步，但返回体仍是“unchanged 或完整 snapshot”两档，还没有真正的 delta / push 形态增量合同。
+- `apps/panel` 当前虽然已经接入 bridge 侧 cursor 条件同步，并补齐了空态 typed 404 语义，但对“存在目标会话”的刷新结果仍然是“unchanged 或完整 snapshot”两档，还没有真正的 delta / push 形态增量合同。
 - `Codex app-server` 协议仍带实验性质，后续仍需持续防守事件名和字段形态的演进风险。
 
 ## 下一步

@@ -199,3 +199,48 @@ test("serves session list, targeted state queries, and control API responses", a
     await server.close();
   }
 });
+
+test("distinguishes missing sessions from the absence of a selected session", async () => {
+  const server = await createBridgeHttpServer({
+    port: 0,
+    getHealth: () => ({
+      ok: true,
+      mode: "live",
+      message: "live app-server connected"
+    }),
+    getState: () => null,
+    getStateSync: () => null
+  });
+
+  try {
+    const noSelectionStateResponse = await fetch(`${server.baseUrl}/api/state`);
+    assert.equal(noSelectionStateResponse.status, 404);
+    assert.deepEqual(await noSelectionStateResponse.json(), {
+      error: "no_session_selected",
+      sessionId: null
+    });
+
+    const noSelectionSyncResponse = await fetch(`${server.baseUrl}/api/state/sync`);
+    assert.equal(noSelectionSyncResponse.status, 404);
+    assert.deepEqual(await noSelectionSyncResponse.json(), {
+      error: "no_session_selected",
+      sessionId: null
+    });
+
+    const missingStateResponse = await fetch(`${server.baseUrl}/api/state?sessionId=missing`);
+    assert.equal(missingStateResponse.status, 404);
+    assert.deepEqual(await missingStateResponse.json(), {
+      error: "session_not_found",
+      sessionId: "missing"
+    });
+
+    const missingSyncResponse = await fetch(`${server.baseUrl}/api/state/sync?sessionId=missing`);
+    assert.equal(missingSyncResponse.status, 404);
+    assert.deepEqual(await missingSyncResponse.json(), {
+      error: "session_not_found",
+      sessionId: "missing"
+    });
+  } finally {
+    await server.close();
+  }
+});

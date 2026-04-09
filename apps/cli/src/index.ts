@@ -26,10 +26,20 @@ function printHelp(io: CommandIO): void {
   );
 }
 
+function normalizeCliArgs(args: string[]): string[] {
+  let index = 0;
+  while (args[index] === "--") {
+    index += 1;
+  }
+
+  return args.slice(index);
+}
+
 export async function runCli(args: string[], dependencies: CliDependencies = {}): Promise<number> {
   const io = dependencies.io ?? consoleIO;
-  const command = args[0];
-  const commandArgs = args.slice(1);
+  const normalizedArgs = normalizeCliArgs(args);
+  const command = normalizedArgs[0];
+  const commandArgs = normalizedArgs.slice(1);
   const openPanel = dependencies.openPanel ?? openPanelUrl;
 
   switch (command) {

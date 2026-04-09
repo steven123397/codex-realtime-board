@@ -9,6 +9,7 @@ import type {
   AttachSessionRequest,
   AttachSessionResult,
   BoardStateSnapshot,
+  BoardStateQueryErrorResponse,
   BoardStateSyncResult,
   BridgeHealthSnapshot,
   ManagedSessionListSnapshot,
@@ -39,6 +40,13 @@ function writeJson(response: ServerResponse, statusCode: number, payload: unknow
     "cache-control": "no-store"
   });
   response.end(JSON.stringify(payload));
+}
+
+function createStateQueryErrorResponse(sessionId: string | null): BoardStateQueryErrorResponse {
+  return {
+    error: sessionId ? "session_not_found" : "no_session_selected",
+    sessionId
+  };
 }
 
 async function readJsonBody<T>(request: IncomingMessage): Promise<T> {
@@ -75,10 +83,7 @@ export async function createBridgeHttpServer(options: BridgeHttpServerOptions): 
       const since = url.searchParams.get("since");
       const result = options.getStateSync(sessionId, since);
       if (!result) {
-        writeJson(response, 404, {
-          error: "session_not_found",
-          sessionId
-        });
+        writeJson(response, 404, createStateQueryErrorResponse(sessionId));
         return;
       }
 
@@ -90,10 +95,7 @@ export async function createBridgeHttpServer(options: BridgeHttpServerOptions): 
       const sessionId = url.searchParams.get("sessionId");
       const snapshot = options.getState(sessionId);
       if (!snapshot) {
-        writeJson(response, 404, {
-          error: "session_not_found",
-          sessionId
-        });
+        writeJson(response, 404, createStateQueryErrorResponse(sessionId));
         return;
       }
 

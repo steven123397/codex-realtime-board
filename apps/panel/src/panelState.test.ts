@@ -175,18 +175,14 @@ test("returns an empty snapshot when the requested session is missing", async ()
     loadBoardStateSyncImpl: async () => {
       throw new BridgeApiError("Bridge request failed with status 404", {
         status: 404,
-        code: "not_found",
-        details: null
-      });
-    },
-    loadBoardStateImpl: async () => {
-      throw new BridgeApiError("Bridge request failed with status 404", {
-        status: 404,
         code: "session_not_found",
         details: {
           sessionId: "missing_session"
         }
       });
+    },
+    loadBoardStateImpl: async () => {
+      throw new Error("full snapshot should not be loaded when sync already reports a missing session");
     },
     loadSessionsImpl: async () => {
       return createManagedSessions("session_a");
@@ -197,7 +193,32 @@ test("returns an empty snapshot when the requested session is missing", async ()
   assert.equal(result.board.session.sessionId, "missing_session");
   assert.match(result.emptyState?.title ?? "", /Session not found/);
   assert.match(result.emptyState?.body ?? "", /missing_session/);
-  assert.equal(result.syncCapability, "unsupported");
+  assert.equal(result.syncCapability, "supported");
+});
+
+test("returns a no-selection empty snapshot directly from the sync endpoint", async () => {
+  const result = await loadPanelSnapshot({
+    loadBoardStateSyncImpl: async () => {
+      throw new BridgeApiError("Bridge request failed with status 404", {
+        status: 404,
+        code: "no_session_selected",
+        details: {
+          sessionId: null
+        }
+      });
+    },
+    loadBoardStateImpl: async () => {
+      throw new Error("full snapshot should not be loaded when sync already reports no selection");
+    },
+    loadSessionsImpl: async () => createManagedSessions(null)
+  });
+
+  assert.equal(result.source, "empty");
+  assert.equal(result.connectionState, "empty");
+  assert.equal(result.board.session.sessionId, "session_unselected");
+  assert.match(result.emptyState?.title ?? "", /No session selected/);
+  assert.equal(result.errorMessage, null);
+  assert.equal(result.syncCapability, "supported");
 });
 
 test("parses session and bridge targets from panel URL search params", () => {
