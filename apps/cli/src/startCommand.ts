@@ -1,10 +1,10 @@
 import { spawn } from "node:child_process";
 
 import { consoleIO, type CommandIO } from "./commandIO.js";
-import { ensureBridgeReady, type BridgeReadyResult } from "./bridgeProcess.js";
+import { ensureLauncherReady, type LauncherReadyResult } from "./launcherRuntime.js";
 
 export interface StartCommandDependencies {
-  ensureBridgeReady?: () => Promise<BridgeReadyResult>;
+  ensureLauncherReady?: () => Promise<LauncherReadyResult>;
   openPanel?: (url: string) => Promise<void> | void;
   io?: CommandIO;
   cwd?: string;
@@ -39,8 +39,8 @@ export async function runStartCommand(
   dependencies: StartCommandDependencies = {}
 ): Promise<number> {
   const io = dependencies.io ?? consoleIO;
-  const bridge = await (dependencies.ensureBridgeReady ?? ensureBridgeReady)();
-  const result = await bridge.client.startSession({
+  const launcher = await (dependencies.ensureLauncherReady ?? ensureLauncherReady)();
+  const result = await launcher.bridge.client.startSession({
     cwd: dependencies.cwd ?? process.cwd(),
     prompt: joinPrompt(args)
   });
@@ -56,7 +56,9 @@ export async function runStartCommand(
   io.log(
     [
       "[codex-board] start",
-      `- Bridge: ${bridge.bridgeBaseUrl} (${bridge.launched ? "started" : "ready"})`,
+      `- App server: ${launcher.appServer.appServerUrl} (${launcher.appServer.launched ? "started" : "ready"})`,
+      `- Bridge: ${launcher.bridge.bridgeBaseUrl} (${launcher.bridge.launched ? "started" : "ready"})`,
+      `- Panel runtime: ${launcher.panel.panelBaseUrl} (${launcher.panel.launched ? "started" : "ready"})`,
       `- Session: ${result.session.sessionId}`,
       `- Panel: ${result.panelUrl}`
     ].join("\n")

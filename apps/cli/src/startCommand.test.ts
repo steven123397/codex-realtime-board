@@ -4,6 +4,7 @@ import test from "node:test";
 import type { ManagedSessionSummary, StartSessionResult } from "@codex-realtime-board/shared";
 
 import { runStartCommand } from "./startCommand.js";
+import { createLocalRuntimeConfig } from "./runtimeConfig.js";
 
 function createSession(overrides: Partial<ManagedSessionSummary> = {}): ManagedSessionSummary {
   return {
@@ -42,24 +43,35 @@ test("starts a managed session after ensuring the bridge is ready", async () => 
         logs.push(`ERR:${message}`);
       }
     },
-    ensureBridgeReady: async () => ({
-      bridgeBaseUrl: "http://127.0.0.1:4317",
-      launched: true,
-      client: {
-        async health() {
-          throw new Error("not needed");
-        },
-        async listSessions() {
-          throw new Error("not needed");
-        },
-        async startSession(request) {
-          requestedPrompt = request.prompt ?? "";
-          requestedCwd = request.cwd ?? "";
-          return result;
-        },
-        async attachSession() {
-          throw new Error("not needed");
+    ensureLauncherReady: async () => ({
+      config: createLocalRuntimeConfig(),
+      appServer: {
+        appServerUrl: "ws://127.0.0.1:3918",
+        launched: true
+      },
+      bridge: {
+        bridgeBaseUrl: "http://127.0.0.1:4317",
+        launched: true,
+        client: {
+          async health() {
+            throw new Error("not needed");
+          },
+          async listSessions() {
+            throw new Error("not needed");
+          },
+          async startSession(request) {
+            requestedPrompt = request.prompt ?? "";
+            requestedCwd = request.cwd ?? "";
+            return result;
+          },
+          async attachSession() {
+            throw new Error("not needed");
+          }
         }
+      },
+      panel: {
+        panelBaseUrl: "http://127.0.0.1:5173",
+        launched: true
       }
     }),
     openPanel: async (url) => {
@@ -73,4 +85,5 @@ test("starts a managed session after ensuring the bridge is ready", async () => 
   assert.equal(openTarget, result.panelUrl);
   assert.match(logs.join("\n"), /session_started/);
   assert.match(logs.join("\n"), /127.0.0.1:4317/);
+  assert.match(logs.join("\n"), /127.0.0.1:3918/);
 });

@@ -4,6 +4,7 @@ import test from "node:test";
 import type { AttachSessionResult, ManagedSessionSummary } from "@codex-realtime-board/shared";
 
 import { runAttachCommand } from "./attachCommand.js";
+import { createLocalRuntimeConfig } from "./runtimeConfig.js";
 
 function createSession(overrides: Partial<ManagedSessionSummary> = {}): ManagedSessionSummary {
   return {
@@ -40,22 +41,33 @@ test("attaches to a selected managed session and opens the panel", async () => {
         logs.push(`ERR:${message}`);
       }
     },
-    ensureBridgeReady: async () => ({
-      bridgeBaseUrl: "http://127.0.0.1:4317",
-      launched: false,
-      client: {
-        async health() {
-          throw new Error("not needed");
-        },
-        async listSessions() {
-          throw new Error("not needed");
-        },
-        async startSession() {
-          throw new Error("not needed");
-        },
-        async attachSession() {
-          return result;
+    ensureLauncherReady: async () => ({
+      config: createLocalRuntimeConfig(),
+      appServer: {
+        appServerUrl: "ws://127.0.0.1:3918",
+        launched: false
+      },
+      bridge: {
+        bridgeBaseUrl: "http://127.0.0.1:4317",
+        launched: false,
+        client: {
+          async health() {
+            throw new Error("not needed");
+          },
+          async listSessions() {
+            throw new Error("not needed");
+          },
+          async startSession() {
+            throw new Error("not needed");
+          },
+          async attachSession() {
+            return result;
+          }
         }
+      },
+      panel: {
+        panelBaseUrl: "http://127.0.0.1:5173",
+        launched: false
       }
     }),
     openPanel: async (url) => {
@@ -66,6 +78,7 @@ test("attaches to a selected managed session and opens the panel", async () => {
   assert.equal(exitCode, 0);
   assert.equal(openTarget, result.panelUrl);
   assert.match(logs.join("\n"), /session_active/);
+  assert.match(logs.join("\n"), /127.0.0.1:5173/);
 });
 
 test("prints active and recent sessions when attach requires explicit selection", async () => {
@@ -107,22 +120,33 @@ test("prints active and recent sessions when attach requires explicit selection"
         logs.push(`ERR:${message}`);
       }
     },
-    ensureBridgeReady: async () => ({
-      bridgeBaseUrl: "http://127.0.0.1:4317",
-      launched: false,
-      client: {
-        async health() {
-          throw new Error("not needed");
-        },
-        async listSessions() {
-          throw new Error("not needed");
-        },
-        async startSession() {
-          throw new Error("not needed");
-        },
-        async attachSession() {
-          return result;
+    ensureLauncherReady: async () => ({
+      config: createLocalRuntimeConfig(),
+      appServer: {
+        appServerUrl: "ws://127.0.0.1:3918",
+        launched: false
+      },
+      bridge: {
+        bridgeBaseUrl: "http://127.0.0.1:4317",
+        launched: false,
+        client: {
+          async health() {
+            throw new Error("not needed");
+          },
+          async listSessions() {
+            throw new Error("not needed");
+          },
+          async startSession() {
+            throw new Error("not needed");
+          },
+          async attachSession() {
+            return result;
+          }
         }
+      },
+      panel: {
+        panelBaseUrl: "http://127.0.0.1:5173",
+        launched: false
       }
     }),
     openPanel: async () => {

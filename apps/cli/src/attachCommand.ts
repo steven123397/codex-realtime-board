@@ -1,11 +1,11 @@
 import type { AttachSessionResult, ManagedSessionSummary } from "@codex-realtime-board/shared";
 
 import { consoleIO, type CommandIO } from "./commandIO.js";
-import { ensureBridgeReady, type BridgeReadyResult } from "./bridgeProcess.js";
+import { ensureLauncherReady, type LauncherReadyResult } from "./launcherRuntime.js";
 import { openPanelUrl } from "./startCommand.js";
 
 export interface AttachCommandDependencies {
-  ensureBridgeReady?: () => Promise<BridgeReadyResult>;
+  ensureLauncherReady?: () => Promise<LauncherReadyResult>;
   openPanel?: (url: string) => Promise<void> | void;
   io?: CommandIO;
 }
@@ -39,9 +39,9 @@ export async function runAttachCommand(
   dependencies: AttachCommandDependencies = {}
 ): Promise<number> {
   const io = dependencies.io ?? consoleIO;
-  const bridge = await (dependencies.ensureBridgeReady ?? ensureBridgeReady)();
+  const launcher = await (dependencies.ensureLauncherReady ?? ensureLauncherReady)();
   const targetSessionId = args[0] ?? null;
-  const result = await bridge.client.attachSession({
+  const result = await launcher.bridge.client.attachSession({
     sessionId: targetSessionId
   });
 
@@ -57,7 +57,9 @@ export async function runAttachCommand(
     io.log(
       [
         "[codex-board] attach",
-        `- Bridge: ${bridge.bridgeBaseUrl} (${bridge.launched ? "started" : "ready"})`,
+        `- App server: ${launcher.appServer.appServerUrl} (${launcher.appServer.launched ? "started" : "ready"})`,
+        `- Bridge: ${launcher.bridge.bridgeBaseUrl} (${launcher.bridge.launched ? "started" : "ready"})`,
+        `- Panel runtime: ${launcher.panel.panelBaseUrl} (${launcher.panel.launched ? "started" : "ready"})`,
         `- Session: ${result.session.sessionId}`,
         `- Panel: ${result.panelUrl}`
       ].join("\n")

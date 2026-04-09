@@ -11,7 +11,7 @@
 - 已落地 `pnpm workspace + TypeScript` monorepo 与共享数据模型骨架。
 - `apps/bridge` 已具备 mock / live 双路径、board-managed session registry、`/api/sessions`、`/api/state`、`/api/session/start`、`/api/session/attach` 和多会话状态归一化能力。
 - `apps/panel` 已能按目标 `sessionId` 消费 bridge snapshot；bridge 不可用时回退到 demo state，会话缺失或未选定时进入明确空态。
-- `apps/cli` 已能通过 bridge 控制面执行 `codex-board start` / `codex-board attach`，并输出目标 panel URL。
+- `apps/cli` 已能先确保本地 `app-server`、bridge 和 panel 运行时可用，再执行 `codex-board start` / `codex-board attach` 并输出目标 panel URL。
 
 ## 仓库结构
 
@@ -50,15 +50,20 @@ corepack pnpm dev:panel
 当前最小控制链路：
 
 ```bash
-# 需要先准备 app-server（如果要走 live 路径）
-export CODEX_APP_SERVER_URL=ws://127.0.0.1:3918
-
 # 启动一个新的 board-managed session
 corepack pnpm --filter @codex-realtime-board/cli dev -- start "Summarize the current workspace"
 
 # 查看并附着到已有 managed session
 corepack pnpm --filter @codex-realtime-board/cli dev -- attach
 corepack pnpm --filter @codex-realtime-board/cli dev -- attach <session-id>
+```
+
+可选环境覆盖：
+
+```bash
+export CODEX_BOARD_APP_SERVER_URL=ws://127.0.0.1:3918
+export CODEX_BOARD_BRIDGE_URL=http://127.0.0.1:4317
+export CODEX_BOARD_PANEL_URL=http://127.0.0.1:5173
 ```
 
 ## 文档

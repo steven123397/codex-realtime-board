@@ -59,7 +59,7 @@
 - `packages/shared` 中的 `V1` 共享数据模型、主 Tab 常量、bridge 健康合同，以及会话管理共享合同。
 - `apps/bridge` 的 mock / live 双路径、`app-server` 客户端、多会话状态归一化，以及 `/healthz`、`/api/sessions`、`/api/state`、`/api/session/start`、`/api/session/attach` HTTP 出口。
 - `apps/panel` 对 bridge snapshot 的按会话消费路径、demo fallback，以及会话缺失 / 未选定时的明确空态。
-- `apps/cli` 的 `start` / `attach` 真实控制路径与 bridge 可用性检查。
+- `apps/cli` 的 `start` / `attach` 真实控制路径，以及对本地 `app-server`、bridge、panel 运行时的最小 launcher 编排。
 - 一组围绕 shared 合同、bridge 控制面、CLI 编排入口、panel 数据加载与衍生状态的最小单测。
 
 ## 当前优先级
@@ -87,7 +87,6 @@
 
 - `docs/status/mainline_status.md`
 - `docs/design/2026-04-06-codex-realtime-board-v1-design.md`
-- `docs/plan/2026-04-08-start-attach-orchestration.md`
 - `docs/plan/history_plan.md`
 
 ## 技术栈

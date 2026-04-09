@@ -14,6 +14,17 @@
 - 过程摘要：
   - 这一轮实现把 `CLI -> bridge control API -> session registry -> panel target session` 这条最小可用主链路打通；后续重点转向 app-server / panel 生命周期收口、attach 交互式选择与更实时的面板刷新。
 
+## 2026-04-09 launcher-lifecycle-orchestration
+
+- 完成时间：2026-04-09
+- 对应设计：`../design/2026-04-06-codex-realtime-board-v1-design.md`
+- 完成内容：
+  - 在 `apps/cli` 中新增本地 runtime 配置、`app-server` / panel 进程管理器与统一 launcher 编排入口。
+  - 让 `codex-board start` / `attach` 在执行会话控制前，按顺序确保 `app-server -> bridge -> panel` 三类本地运行时。
+  - 保持 bridge live 模式启动参数由 launcher 统一传递，并补齐 CLI 侧的运行时编排测试。
+- 过程摘要：
+  - 这一轮把“尽量减少手动前置拉起本地进程”的目标推进到可用状态；后续重点转向 attach 交互式选择、panel 实时刷新，以及 runtime manifest / 进程清理策略。
+
 ## 2026-04-08 bootstrap-monorepo-skeleton
 
 - 完成时间：2026-04-08

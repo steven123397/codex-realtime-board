@@ -4,6 +4,7 @@
 
 - 背景文档：`../background/request.md`
 - 状态文档：`../status/mainline_status.md`
+- 最新完成计划：`../plan/history_plan.md#2026-04-09-launcher-lifecycle-orchestration`
 - 最近完成计划：`../plan/history_plan.md#2026-04-08-start-attach-orchestration`
 
 ## 当前有效性说明
@@ -66,6 +67,12 @@
   启动一个新会话，同时拉起 bridge 和 panel。
 - `codex-board attach`
   附着到一个已存在的 board-managed 会话。
+
+在当前阶段，launcher 还需要进一步收口 companion 运行时的生命周期：
+
+- 尽量由 `codex-board` 负责确保本地 `app-server`、bridge 与 panel 可用。
+- 优先减少“每次运行前手动拉起多个本地进程”的摩擦。
+- 保持 `Codex CLI` 本体不被改写，launcher 只管理 companion 侧运行时。
 
 ### 3.3 会话选择策略
 
