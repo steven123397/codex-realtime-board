@@ -4,7 +4,7 @@
 
 - 背景文档：`../background/request.md`
 - 状态文档：`../status/mainline_status.md`
-- 相关计划：`../plan/2026-04-08-start-attach-orchestration.md`
+- 最近完成计划：`../plan/history_plan.md#2026-04-08-start-attach-orchestration`
 
 ## 当前有效性说明
 
@@ -74,6 +74,8 @@
 - 若只有 1 个活跃会话，则直接附着。
 - 若有多个活跃会话，则先进入选择器。
 - 若没有活跃会话，则显示最近会话列表。
+
+V1 的首轮工程落地允许先用终端输出 `Active / Recent` 列表，并通过 `codex-board attach <session-id>` 明确目标；后续再把它收口为更完整的交互式选择器。
 
 会话选择器分为两块：
 
@@ -233,6 +235,15 @@ V1 应直接接 `Codex app-server` 暴露的结构化协议事件。
 - 标准化事件模型
 - 轻量历史缓存
 - 推断态数据生成
+
+V1 当前已经形成的最小控制面包括：
+
+- `GET /api/sessions`
+- `GET /api/state?sessionId=...`
+- `POST /api/session/start`
+- `POST /api/session/attach`
+
+panel 只消费这些稳定控制 / 状态合同，而不直接绑定底层 `app-server` 协议。
 
 ## 6. 本地已验证的协议信号
 

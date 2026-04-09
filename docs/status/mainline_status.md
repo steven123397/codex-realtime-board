@@ -3,23 +3,23 @@
 ## 关联文档
 
 - 相关设计：`../design/2026-04-06-codex-realtime-board-v1-design.md`
-- 当前计划：`../plan/2026-04-08-start-attach-orchestration.md`
-- 已完成计划：`../plan/history_plan.md#2026-04-08-bootstrap-monorepo-skeleton`
+- 最近完成计划：`../plan/history_plan.md#2026-04-08-start-attach-orchestration`
+- 更早完成计划：`../plan/history_plan.md#2026-04-08-bootstrap-monorepo-skeleton`
 
 ## 目标 / 主题
 
-本文档跟踪 Codex Realtime Board 当前主线的工程状态。当前目标是在保持 `Codex CLI` 为主工作面的前提下，稳住 `bridge` 的状态归一化合同、panel 的消费入口，以及后续 `start` / `attach` 编排所需的结构边界。
+本文档跟踪 Codex Realtime Board 当前主线的工程状态。当前目标是在保持 `Codex CLI` 为主工作面的前提下，稳住 `bridge` 的状态归一化与控制合同、panel 的会话化消费入口，以及 `start` / `attach` 主链路之后的下一轮稳定化工作。
 
 ## 当前状态
 
 当前已经稳定成立的事实包括：
 
 - 已落地 `pnpm workspace + TypeScript` monorepo 骨架，以及 `apps/cli`、`apps/bridge`、`apps/panel`、`packages/shared` 四个主模块边界。
-- `packages/shared` 已承载 `V1_PRIMARY_TABS`、会话摘要、工具卡片、搜索卡片、记忆引用、上下文预算和 bridge 健康快照等基础合同。
-- `apps/bridge` 已具备 mock / live 双路径、`app-server` WebSocket transport、初始化请求客户端、状态归一化 store，以及 `/healthz`、`/api/state` HTTP 接口。
-- `apps/panel` 已以 bridge snapshot 作为主数据源，bridge 不可用时会回退到 demo state，并已接通首版 Overview / Tabs 面板壳层。
-- `apps/cli` 当前仍未完成真实编排链路，但下一轮活跃计划已经收口到 `../plan/2026-04-08-start-attach-orchestration.md`。
-- 当前门禁已经覆盖 bridge client、bridge state、HTTP API，以及 panel 的数据加载与衍生状态。
+- `packages/shared` 已承载 `V1_PRIMARY_TABS`、会话摘要、工具卡片、搜索卡片、记忆引用、上下文预算、bridge 健康快照，以及 `start / attach` 所需的会话管理合同与 panel 查询参数常量。
+- `apps/bridge` 已具备 mock / live 双路径、`app-server` WebSocket transport、多会话状态归一化、board-managed session registry，以及 `/healthz`、`/api/sessions`、`/api/state`、`/api/session/start`、`/api/session/attach` 控制出口。
+- `apps/cli` 已从占位输出推进到真实控制路径：会先确保本地 bridge 可用，再通过 bridge 控制面执行 `start` / `attach`，并输出目标 panel URL。
+- `apps/panel` 已能根据 URL 中的目标 `sessionId` 与 `bridgeUrl` 读取指定快照；bridge 不可用时回退 demo state，目标会话缺失或未选定时转为明确空态。
+- 当前门禁已经覆盖 shared 合同、bridge session registry / control API、CLI orchestrator、panel 的按会话加载与衍生状态。
 
 ## 关键历史节点
 
@@ -27,18 +27,19 @@
 - `2026-04-08`：完成 `pnpm workspace + TypeScript` monorepo 骨架初始化。
 - `2026-04-08`：接通 `bridge` 的实时状态接口与 `panel` 的 snapshot 消费路径，形成首条真实 `bridge -> panel` 主链路。
 - `2026-04-08`：完成文档治理体系接入，正式建立 `background / design / plan / status + AGENTS.md` 的维护规则。
+- `2026-04-09`：完成 `start / attach` 主线实现，打通 `CLI -> bridge control API -> session registry -> panel target session` 这条最小可用编排链路。
 
 ## 当前仍然有效的风险 / 限制
 
-- `apps/cli` 尚未真正拉起 bridge、打开 panel 或管理 board-managed session，`start` / `attach` 仍停留在占位级行为。
-- `apps/panel` 当前只做一次性快照加载，还没有增量刷新、实时订阅、会话切换或更完整的交互层。
-- `apps/bridge` 当前更偏单会话原型，活跃 / 最近会话索引、恢复策略和多会话管理尚未完善。
+- `apps/cli` 当前会确保 bridge 可用并打开目标 panel URL，但还没有把 `Codex app-server` 与 panel dev server 的进程生命周期统一纳入 launcher。
+- `attach` 的多会话选择当前仍是“列出 active / recent 后，通过 `codex-board attach <session-id>` 明确目标”的最小形态，还不是完整交互式选择器。
+- `apps/panel` 当前仍以一次性快照加载为主，还没有增量刷新、实时订阅或运行中的会话切换体验。
 - `Codex app-server` 协议仍带实验性质，后续仍需持续防守事件名和字段形态的演进风险。
 
 ## 下一步
 
-1. 推进 `apps/cli` 的 `start` / `attach` 编排，把 bridge、panel 和受管会话真正串起来。
-2. 继续稳住 `apps/bridge` 的 live 会话接入、会话索引和状态归一化边界，补最小回归。
+1. 把 `Codex app-server` 与 panel 运行时的生命周期进一步收口到 launcher，减少对手动前置环境的依赖。
+2. 把 `attach` 从显式 `session-id` 选择推进到更顺手的交互式选择器或会话总览入口。
 3. 让 `apps/panel` 从一次性 snapshot 加载逐步演进到更实时的 companion 视图，同时继续保持“只消费 bridge 合同”的结构边界。
 
 ## 验证基线

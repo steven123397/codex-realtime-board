@@ -9,9 +9,9 @@
 - 已完成产品方向和 `V1` 边界收敛。
 - 已确认优先走 `Codex app-server` 协议，而不是解析终端字符流。
 - 已落地 `pnpm workspace + TypeScript` monorepo 与共享数据模型骨架。
-- `apps/bridge` 已具备 mock / live 双路径、`/healthz`、`/api/state` 和最小状态归一化能力。
-- `apps/panel` 已能消费 bridge snapshot，并在 bridge 不可用时回退到 demo state。
-- `apps/cli` 当前仍是 `start` / `attach` 占位入口，完整 launcher / session 管理尚未落地。
+- `apps/bridge` 已具备 mock / live 双路径、board-managed session registry、`/api/sessions`、`/api/state`、`/api/session/start`、`/api/session/attach` 和多会话状态归一化能力。
+- `apps/panel` 已能按目标 `sessionId` 消费 bridge snapshot；bridge 不可用时回退到 demo state，会话缺失或未选定时进入明确空态。
+- `apps/cli` 已能通过 bridge 控制面执行 `codex-board start` / `codex-board attach`，并输出目标 panel URL。
 
 ## 仓库结构
 
@@ -47,10 +47,23 @@ corepack pnpm dev:bridge
 corepack pnpm dev:panel
 ```
 
+当前最小控制链路：
+
+```bash
+# 需要先准备 app-server（如果要走 live 路径）
+export CODEX_APP_SERVER_URL=ws://127.0.0.1:3918
+
+# 启动一个新的 board-managed session
+corepack pnpm --filter @codex-realtime-board/cli dev -- start "Summarize the current workspace"
+
+# 查看并附着到已有 managed session
+corepack pnpm --filter @codex-realtime-board/cli dev -- attach
+corepack pnpm --filter @codex-realtime-board/cli dev -- attach <session-id>
+```
+
 ## 文档
 
 - 文档入口：`docs/index.md`
 - 主线状态：`docs/status/mainline_status.md`
 - `V1` 设计文档：`docs/design/2026-04-06-codex-realtime-board-v1-design.md`
-- 当前活跃计划：`docs/plan/2026-04-08-start-attach-orchestration.md`
 - 历史计划归档：`docs/plan/history_plan.md`

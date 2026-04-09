@@ -295,8 +295,10 @@ export function createBridgeStateStore(
               label: notification.params.turn.error.message
             };
           } else {
+            state.session.status = "completed";
             state.overview.currentPhase = "completed";
             state.overview.currentTool = null;
+            state.overview.pendingUserAction = null;
           }
           break;
         case "item/started":

@@ -1,21 +1,61 @@
-import type { BridgeHealthSnapshot } from "@codex-realtime-board/shared";
+import type {
+  AttachSessionRequest,
+  AttachSessionResult,
+  BoardStateSnapshot,
+  BridgeHealthSnapshot,
+  ManagedSessionListSnapshot,
+  StartSessionRequest,
+  StartSessionResult
+} from "@codex-realtime-board/shared";
 
 import { createBridgeHttpServer } from "./httpServer.js";
 import { connectLiveBridge } from "./liveBridge.js";
+import type { AppServerNotificationMessage } from "./appServerProtocol.js";
 import { createMockBridgeServer } from "./server.js";
 
 interface RuntimeStateSource {
   getHealth(): BridgeHealthSnapshot;
-  getState(): ReturnType<ReturnType<typeof createMockBridgeServer>["getState"]>;
+  getState(sessionId?: string | null): BoardStateSnapshot | null;
+  listSessions(): ManagedSessionListSnapshot;
+  startSession(request: StartSessionRequest): Promise<StartSessionResult>;
+  attachSession(request: AttachSessionRequest): Promise<AttachSessionResult>;
 }
 
-function printSnapshot(prefix: string, sessionId: string, phase: string, tool: string | null): void {
-  console.log([
-    prefix,
-    `[bridge] session=${sessionId}`,
-    `[bridge] phase=${phase}`,
-    `[bridge] tool=${tool ?? "idle"}`
-  ].join("\n"));
+function getNotificationThreadId(notification: AppServerNotificationMessage): string | null {
+  switch (notification.method) {
+    case "thread/started":
+      return notification.params.thread.id;
+    case "thread/status/changed":
+    case "turn/started":
+    case "turn/completed":
+    case "item/started":
+    case "item/completed":
+    case "thread/tokenUsage/updated":
+    case "turn/plan/updated":
+    case "thread/compacted":
+    case "error":
+      return notification.params.threadId;
+    case "skills/changed":
+      return null;
+    default:
+      return null;
+  }
+}
+
+function printSnapshot(prefix: string, snapshot: BoardStateSnapshot | null): void {
+  if (!snapshot) {
+    console.log([prefix, "[bridge] waiting for a managed session"].join("\n"));
+    return;
+  }
+
+  console.log(
+    [
+      prefix,
+      `[bridge] session=${snapshot.session.sessionId}`,
+      `[bridge] phase=${snapshot.overview.currentPhase}`,
+      `[bridge] tool=${snapshot.overview.currentTool ?? "idle"}`
+    ].join("\n")
+  );
 }
 
 async function keepAlive(): Promise<never> {
@@ -26,18 +66,27 @@ async function run(): Promise<void> {
   const liveUrl = process.env.CODEX_APP_SERVER_URL;
   const bridgeHost = process.env.CODEX_BRIDGE_HOST ?? "127.0.0.1";
   const bridgePort = Number(process.env.CODEX_BRIDGE_PORT ?? "4317");
+  const panelBaseUrl = process.env.CODEX_BOARD_PANEL_URL ?? "http://127.0.0.1:5173";
   const exitOnCompletion = process.env.CODEX_BRIDGE_EXIT_ON_COMPLETION === "1";
 
   let source: RuntimeStateSource;
+  let currentBridgeBaseUrl = `http://${bridgeHost}:${bridgePort}`;
 
   if (!liveUrl) {
     const mockBridge = createMockBridgeServer();
     source = {
       getHealth: () => mockBridge.getHealth(),
-      getState: () => mockBridge.getState()
+      getState: (sessionId) => mockBridge.getState(sessionId),
+      listSessions: () => mockBridge.listSessions(),
+      startSession: (request) => mockBridge.startSession(request),
+      attachSession: (request) => mockBridge.attachSession(request)
     };
   } else {
-    const liveBridge = await connectLiveBridge(liveUrl);
+    const liveBridge = await connectLiveBridge(liveUrl, {
+      cwd: process.cwd(),
+      getBridgeBaseUrl: () => currentBridgeBaseUrl,
+      getPanelBaseUrl: () => panelBaseUrl
+    });
     const requestedThreadId = process.env.CODEX_THREAD_ID;
     const requestedPrompt = process.env.CODEX_BRIDGE_PROMPT;
 
@@ -47,15 +96,8 @@ async function run(): Promise<void> {
     });
 
     liveBridge.client.onNotification((notification) => {
-      const snapshot = liveBridge.stateStore.getState();
-      console.log(
-        [
-          `[bridge:event] ${notification.method}`,
-          `[bridge] phase=${snapshot.overview.currentPhase}`,
-          `[bridge] tool=${snapshot.overview.currentTool ?? "idle"}`,
-          `[bridge] session=${snapshot.session.sessionId}`
-        ].join("\n")
-      );
+      const snapshot = liveBridge.controlApi.getState(getNotificationThreadId(notification));
+      printSnapshot(`[bridge:event] ${notification.method}`, snapshot);
 
       if ((notification.method === "turn/completed" || notification.method === "error") && resolveDone) {
         resolveDone();
@@ -68,31 +110,24 @@ async function run(): Promise<void> {
         threadId: requestedThreadId,
         persistExtendedHistory: true
       });
+      liveBridge.handleNotification({
+        method: "thread/started",
+        params: {
+          thread: resumed.thread
+        }
+      });
+      await liveBridge.controlApi.attachSession({
+        sessionId: resumed.thread.id
+      });
       console.log(`[bridge] resumed thread=${resumed.thread.id}`);
     }
 
     if (!requestedThreadId && requestedPrompt) {
-      const started = await liveBridge.client.startThread({
+      const started = await liveBridge.controlApi.startSession({
         cwd: process.cwd(),
-        approvalPolicy: "never",
-        sandbox: "workspace-write",
-        experimentalRawEvents: false,
-        persistExtendedHistory: true,
-        ephemeral: true
+        prompt: requestedPrompt
       });
-      console.log(`[bridge] started thread=${started.thread.id}`);
-
-      await liveBridge.client.startTurn({
-        threadId: started.thread.id,
-        input: [
-          {
-            type: "text",
-            text: requestedPrompt,
-            text_elements: []
-          }
-        ]
-      });
-      console.log("[bridge] turn started");
+      console.log(`[bridge] started thread=${started.session.sessionId}`);
     }
 
     if (requestedPrompt && exitOnCompletion) {
@@ -103,12 +138,11 @@ async function run(): Promise<void> {
     }
 
     source = {
-      getHealth: () => ({
-        ok: true,
-        mode: "live",
-        message: `Connected to ${liveUrl}`
-      }),
-      getState: () => liveBridge.stateStore.getState()
+      getHealth: () => liveBridge.getHealth(),
+      getState: (sessionId) => liveBridge.controlApi.getState(sessionId),
+      listSessions: () => liveBridge.controlApi.listSessions(),
+      startSession: (request) => liveBridge.controlApi.startSession(request),
+      attachSession: (request) => liveBridge.controlApi.attachSession(request)
     };
   }
 
@@ -116,17 +150,16 @@ async function run(): Promise<void> {
     host: bridgeHost,
     port: bridgePort,
     getHealth: () => source.getHealth(),
-    getState: () => source.getState()
+    getState: (sessionId) => source.getState(sessionId),
+    listSessions: () => source.listSessions(),
+    startSession: (request) => source.startSession(request),
+    attachSession: (request) => source.attachSession(request)
   });
+  currentBridgeBaseUrl = httpServer.baseUrl;
 
-  const snapshot = source.getState();
-  printSnapshot(
-    `[bridge] http server ready at ${httpServer.baseUrl}`,
-    snapshot.session.sessionId,
-    snapshot.overview.currentPhase,
-    snapshot.overview.currentTool
-  );
+  printSnapshot(`[bridge] http server ready at ${httpServer.baseUrl}`, source.getState());
   console.log(`[bridge] health endpoint ${httpServer.baseUrl}/healthz`);
+  console.log(`[bridge] sessions endpoint ${httpServer.baseUrl}/api/sessions`);
   console.log(`[bridge] state endpoint ${httpServer.baseUrl}/api/state`);
 
   await keepAlive();

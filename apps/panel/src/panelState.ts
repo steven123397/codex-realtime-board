@@ -1,27 +1,44 @@
-import type {
-  BoardStateSnapshot,
-  ContextSnapshot,
-  MemoryReferenceRecord,
-  OverviewSnapshot,
-  SearchSessionCard,
-  SessionSummary,
-  SkillActivationRecord,
-  ToolSessionCard
+import {
+  PANEL_BRIDGE_URL_QUERY_PARAM,
+  PANEL_SESSION_ID_QUERY_PARAM,
+  type BoardStateSnapshot,
+  type ContextSnapshot,
+  type MemoryReferenceRecord,
+  type OverviewSnapshot,
+  type SearchSessionCard,
+  type SessionSummary,
+  type SkillActivationRecord,
+  type ToolSessionCard
 } from "@codex-realtime-board/shared";
 
-import { loadBoardState, type LoadBoardStateOptions } from "./api.js";
+import {
+  BridgeApiError,
+  loadBoardState,
+  type LoadBoardStateOptions
+} from "./api.js";
 
-export type PanelSnapshotSource = "bridge" | "fallback";
+export type PanelSnapshotSource = "bridge" | "fallback" | "empty";
+
+export interface PanelEmptyState {
+  title: string;
+  body: string;
+}
 
 export interface PanelSnapshot {
   board: BoardStateSnapshot;
   source: PanelSnapshotSource;
   errorMessage: string | null;
+  emptyState: PanelEmptyState | null;
 }
 
 export interface LoadPanelSnapshotOptions extends LoadBoardStateOptions {
   fallbackState?: BoardStateSnapshot;
   loadBoardStateImpl?: (options: LoadBoardStateOptions) => Promise<BoardStateSnapshot>;
+}
+
+export interface PanelTarget {
+  sessionId: string | null;
+  baseUrl?: string;
 }
 
 function minutesAgo(baseTime: Date, minutes: number): string {
@@ -38,6 +55,52 @@ function normalizeError(error: unknown): string {
   }
 
   return "Unknown bridge error";
+}
+
+function createZeroContext(): ContextSnapshot {
+  return {
+    usedTokens: 0,
+    contextWindow: 0,
+    remainingTokens: 0,
+    recentCompactions: [],
+    growthTrend: "steady",
+    pressure: "low"
+  };
+}
+
+function createEmptyBoardState(sessionId: string, title: string, status: SessionSummary["status"]): BoardStateSnapshot {
+  const context = createZeroContext();
+  return {
+    session: {
+      sessionId,
+      title,
+      status,
+      lastActiveAt: new Date(0).toISOString(),
+      isManaged: true
+    },
+    overview: {
+      currentTool: null,
+      currentPhase: "booting",
+      contextBudget: context,
+      pendingUserAction: null
+    },
+    tools: [],
+    searches: [],
+    skills: [],
+    memories: [],
+    context
+  };
+}
+
+export function readPanelTargetFromSearch(search: string): PanelTarget {
+  const params = new URLSearchParams(search);
+  const sessionId = params.get(PANEL_SESSION_ID_QUERY_PARAM);
+  const baseUrl = params.get(PANEL_BRIDGE_URL_QUERY_PARAM) ?? undefined;
+
+  return {
+    sessionId,
+    baseUrl
+  };
 }
 
 export function createDemoBoardState(baseTime: Date = new Date()): BoardStateSnapshot {
@@ -135,6 +198,30 @@ export function createDemoBoardState(baseTime: Date = new Date()): BoardStateSna
   };
 }
 
+function createMissingSessionSnapshot(sessionId: string): PanelSnapshot {
+  return {
+    board: createEmptyBoardState(sessionId, "Session not found", "error"),
+    source: "empty",
+    errorMessage: `Managed session not found: ${sessionId}`,
+    emptyState: {
+      title: "Session not found",
+      body: `Bridge does not currently expose a managed session with id \`${sessionId}\`. Re-run \`codex-board attach\` and pick a valid target.`
+    }
+  };
+}
+
+function createNoSelectionSnapshot(): PanelSnapshot {
+  return {
+    board: createEmptyBoardState("session_unselected", "No board-managed session selected", "idle"),
+    source: "empty",
+    errorMessage: null,
+    emptyState: {
+      title: "No session selected",
+      body: "Bridge is reachable, but no managed session is selected yet. Run `codex-board start` or `codex-board attach <session-id>` first."
+    }
+  };
+}
+
 export async function loadPanelSnapshot(options: LoadPanelSnapshotOptions = {}): Promise<PanelSnapshot> {
   const { fallbackState = createDemoBoardState(), loadBoardStateImpl = loadBoardState, ...loadOptions } = options;
 
@@ -143,13 +230,23 @@ export async function loadPanelSnapshot(options: LoadPanelSnapshotOptions = {}):
     return {
       board,
       source: "bridge",
-      errorMessage: null
+      errorMessage: null,
+      emptyState: null
     };
   } catch (error) {
+    if (error instanceof BridgeApiError && error.status === 404) {
+      if (loadOptions.sessionId && error.code === "session_not_found") {
+        return createMissingSessionSnapshot(loadOptions.sessionId);
+      }
+
+      return createNoSelectionSnapshot();
+    }
+
     return {
       board: fallbackState,
       source: "fallback",
-      errorMessage: normalizeError(error)
+      errorMessage: normalizeError(error),
+      emptyState: null
     };
   }
 }

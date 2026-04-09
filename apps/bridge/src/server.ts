@@ -1,34 +1,45 @@
 import type {
+  AttachSessionRequest,
+  AttachSessionResult,
   BoardStateSnapshot,
   BridgeHealthSnapshot,
-  ContextSnapshot
+  ContextSnapshot,
+  ManagedSessionListSnapshot,
+  StartSessionRequest,
+  StartSessionResult
 } from "@codex-realtime-board/shared";
+
+import { createBridgeControlApi } from "./controlApi.js";
+import { createSessionRegistry } from "./sessionRegistry.js";
 
 export interface BridgeServer {
   getHealth(): BridgeHealthSnapshot;
-  getState(): BoardStateSnapshot;
+  getState(sessionId?: string | null): BoardStateSnapshot | null;
+  listSessions(): ManagedSessionListSnapshot;
+  startSession(request: StartSessionRequest): Promise<StartSessionResult>;
+  attachSession(request: AttachSessionRequest): Promise<AttachSessionResult>;
 }
 
 function minutesAgo(baseTime: Date, minutes: number): string {
   return new Date(baseTime.getTime() - minutes * 60_000).toISOString();
 }
 
-export function createMockBridgeServer(baseTime: Date = new Date()): BridgeServer {
+function createMockState(sessionId: string, title: string, at: Date): BoardStateSnapshot {
   const context: ContextSnapshot = {
     usedTokens: 38240,
     contextWindow: 128000,
     remainingTokens: 89760,
-    recentCompactions: [minutesAgo(baseTime, 48)],
+    recentCompactions: [minutesAgo(at, 48)],
     growthTrend: "rising",
     pressure: "low"
   };
 
-  const state: BoardStateSnapshot = {
+  return {
     session: {
-      sessionId: "session_local_demo",
-      title: "Codex Realtime Board V1 bootstrap",
+      sessionId,
+      title,
       status: "running",
-      lastActiveAt: baseTime.toISOString(),
+      lastActiveAt: at.toISOString(),
       isManaged: true
     },
     overview: {
@@ -43,8 +54,8 @@ export function createMockBridgeServer(baseTime: Date = new Date()): BridgeServe
         title: "Inspect app-server event surface",
         reason: "Verify which structured events can power the board",
         summary: "Confirmed token usage, plan, item lifecycle, skills, search, and compact events.",
-        startedAt: minutesAgo(baseTime, 20),
-        endedAt: minutesAgo(baseTime, 18),
+        startedAt: minutesAgo(at, 20),
+        endedAt: minutesAgo(at, 18),
         status: "completed"
       }
     ],
@@ -54,7 +65,7 @@ export function createMockBridgeServer(baseTime: Date = new Date()): BridgeServe
         actions: ["webSearch", "open docs", "compare event names"],
         summary: "Search session grouped into a single card for the panel.",
         inferredIndexing: false,
-        startedAt: minutesAgo(baseTime, 22),
+        startedAt: minutesAgo(at, 22),
         status: "completed"
       }
     ],
@@ -63,7 +74,7 @@ export function createMockBridgeServer(baseTime: Date = new Date()): BridgeServe
         skillName: "writing-plans",
         source: "local skill registry",
         status: "completed",
-        timestamp: minutesAgo(baseTime, 15)
+        timestamp: minutesAgo(at, 15)
       }
     ],
     memories: [
@@ -80,6 +91,28 @@ export function createMockBridgeServer(baseTime: Date = new Date()): BridgeServe
     ],
     context
   };
+}
+
+export function createMockBridgeServer(baseTime: Date = new Date()): BridgeServer {
+  const registry = createSessionRegistry();
+  const panelBaseUrl = process.env.CODEX_BOARD_PANEL_URL ?? "http://127.0.0.1:5173";
+  const bridgeBaseUrl = process.env.CODEX_BRIDGE_BASE_URL ?? "http://127.0.0.1:4317";
+  let nextMockSessionNumber = 1;
+
+  registry.upsertState(createMockState("session_local_demo", "Codex Realtime Board V1 bootstrap", baseTime), {
+    select: true
+  });
+
+  const controlApi = createBridgeControlApi({
+    registry,
+    getBridgeBaseUrl: () => bridgeBaseUrl,
+    getPanelBaseUrl: () => panelBaseUrl,
+    async startSession(request) {
+      const sessionId = `session_mock_${String(nextMockSessionNumber++).padStart(3, "0")}`;
+      const at = new Date(baseTime.getTime() + nextMockSessionNumber * 60_000);
+      return createMockState(sessionId, request.title ?? "Mock managed session", at);
+    }
+  });
 
   return {
     getHealth() {
@@ -89,8 +122,17 @@ export function createMockBridgeServer(baseTime: Date = new Date()): BridgeServe
         message: "Bridge skeleton is alive and serving mock board data."
       };
     },
-    getState() {
-      return state;
+    getState(sessionId) {
+      return controlApi.getState(sessionId);
+    },
+    listSessions() {
+      return controlApi.listSessions();
+    },
+    startSession(request) {
+      return controlApi.startSession(request);
+    },
+    attachSession(request) {
+      return controlApi.attachSession(request);
     }
   };
 }

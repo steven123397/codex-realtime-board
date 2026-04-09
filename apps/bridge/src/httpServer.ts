@@ -1,13 +1,28 @@
-import { createServer, type ServerResponse } from "node:http";
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse
+} from "node:http";
 import type { AddressInfo } from "node:net";
 
-import type { BoardStateSnapshot, BridgeHealthSnapshot } from "@codex-realtime-board/shared";
+import type {
+  AttachSessionRequest,
+  AttachSessionResult,
+  BoardStateSnapshot,
+  BridgeHealthSnapshot,
+  ManagedSessionListSnapshot,
+  StartSessionRequest,
+  StartSessionResult
+} from "@codex-realtime-board/shared";
 
 export interface BridgeHttpServerOptions {
   host?: string;
   port: number;
   getHealth(): BridgeHealthSnapshot;
-  getState(): BoardStateSnapshot;
+  getState(sessionId?: string | null): BoardStateSnapshot | null;
+  listSessions?(): ManagedSessionListSnapshot;
+  startSession?(request: StartSessionRequest): Promise<StartSessionResult>;
+  attachSession?(request: AttachSessionRequest): Promise<AttachSessionResult>;
 }
 
 export interface BridgeHttpServer {
@@ -24,9 +39,23 @@ function writeJson(response: ServerResponse, statusCode: number, payload: unknow
   response.end(JSON.stringify(payload));
 }
 
+async function readJsonBody<T>(request: IncomingMessage): Promise<T> {
+  const chunks: Buffer[] = [];
+
+  for await (const chunk of request) {
+    chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+  }
+
+  if (chunks.length === 0) {
+    return {} as T;
+  }
+
+  return JSON.parse(Buffer.concat(chunks).toString("utf8")) as T;
+}
+
 export async function createBridgeHttpServer(options: BridgeHttpServerOptions): Promise<BridgeHttpServer> {
   const host = options.host ?? "127.0.0.1";
-  const server = createServer((request, response) => {
+  const server = createServer(async (request, response) => {
     const url = new URL(request.url ?? "/", `http://${request.headers.host ?? `${host}:${options.port}`}`);
 
     if (request.method === "GET" && (url.pathname === "/healthz" || url.pathname === "/readyz")) {
@@ -34,8 +63,35 @@ export async function createBridgeHttpServer(options: BridgeHttpServerOptions): 
       return;
     }
 
+    if (request.method === "GET" && url.pathname === "/api/sessions" && options.listSessions) {
+      writeJson(response, 200, options.listSessions());
+      return;
+    }
+
     if (request.method === "GET" && url.pathname === "/api/state") {
-      writeJson(response, 200, options.getState());
+      const sessionId = url.searchParams.get("sessionId");
+      const snapshot = options.getState(sessionId);
+      if (!snapshot) {
+        writeJson(response, 404, {
+          error: "session_not_found",
+          sessionId
+        });
+        return;
+      }
+
+      writeJson(response, 200, snapshot);
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/session/start" && options.startSession) {
+      const payload = await readJsonBody<StartSessionRequest>(request);
+      writeJson(response, 200, await options.startSession(payload));
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/session/attach" && options.attachSession) {
+      const payload = await readJsonBody<AttachSessionRequest>(request);
+      writeJson(response, 200, await options.attachSession(payload));
       return;
     }
 

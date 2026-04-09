@@ -97,3 +97,41 @@ test("marks pending user input when thread status indicates it", () => {
     label: "Waiting for user input"
   });
 });
+
+test("marks a session as completed when the turn finishes without error", () => {
+  const store = createBridgeStateStore();
+
+  store.applyNotification(
+    {
+      method: "thread/status/changed",
+      params: {
+        threadId: "thread_live",
+        status: {
+          type: "active",
+          activeFlags: []
+        }
+      }
+    },
+    new Date("2026-04-09T10:00:00.000Z")
+  );
+
+  store.applyNotification(
+    {
+      method: "turn/completed",
+      params: {
+        threadId: "thread_live",
+        turn: {
+          id: "turn_live",
+          items: [],
+          status: "completed",
+          error: null
+        }
+      }
+    },
+    new Date("2026-04-09T10:02:00.000Z")
+  );
+
+  const state = store.getState();
+  assert.equal(state.session.status, "completed");
+  assert.equal(state.overview.currentPhase, "completed");
+});

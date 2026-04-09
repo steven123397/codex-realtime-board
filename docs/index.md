@@ -10,9 +10,7 @@
    当前主线状态、活跃风险和下一步。
 3. `design/2026-04-06-codex-realtime-board-v1-design.md`
    `V1` 产品边界、结构设计和长期有效方案。
-4. `plan/2026-04-08-start-attach-orchestration.md`
-   当前活跃的 `start / attach` 编排计划。
-5. `plan/history_plan.md`
+4. `plan/history_plan.md`
    已完成计划的统一归档入口。
 
 ## 专题入口
@@ -21,8 +19,6 @@
   - `status/mainline_status.md`
 - `V1 产品与架构`
   - `design/2026-04-06-codex-realtime-board-v1-design.md`
-- `launcher / session 编排`
-  - `plan/2026-04-08-start-attach-orchestration.md`
 - `历史计划`
   - `plan/history_plan.md`
 - `文档模板`
@@ -37,7 +33,7 @@
 - `design/`
   长期有效的产品设计、结构边界和契约。
 - `plan/`
-  活跃计划、计划模板和已完成计划归档。
+  活跃计划、计划模板和已完成计划归档。当前暂无独立活跃计划，最近完成项见 `plan/history_plan.md`。
 - `status/`
   当前状态、风险、少量关键历史节点和下一步。
 

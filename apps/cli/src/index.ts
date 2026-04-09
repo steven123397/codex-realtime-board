@@ -1,43 +1,61 @@
 #!/usr/bin/env node
 
-import { V1_PRIMARY_TABS } from "@codex-realtime-board/shared";
+import { fileURLToPath } from "node:url";
 
-const command = process.argv[2];
+import { runAttachCommand, type AttachCommandDependencies } from "./attachCommand.js";
+import { consoleIO, type CommandIO } from "./commandIO.js";
+import { runStartCommand, type StartCommandDependencies, openPanelUrl } from "./startCommand.js";
 
-function printHelp(): void {
-  console.log(`codex-board <command>\n\nCommands:\n  start   Start a board-managed Codex session\n  attach  Attach to an existing board-managed session\n  help    Show this message`);
+export interface CliDependencies {
+  io?: CommandIO;
+  runStartCommand?: (args: string[], dependencies: StartCommandDependencies) => Promise<number>;
+  runAttachCommand?: (args: string[], dependencies: AttachCommandDependencies) => Promise<number>;
+  openPanel?: (url: string) => Promise<void> | void;
 }
 
-function printStartPlaceholder(): void {
-  console.log([
-    "[codex-board] start",
-    "- Launcher skeleton is ready.",
-    "- Next step: start local bridge, open panel, and boot a managed Codex session.",
-    `- V1 tabs: ${V1_PRIMARY_TABS.join(", ")}`
-  ].join("\n"));
+function printHelp(io: CommandIO): void {
+  io.log(
+    [
+      "codex-board <command> [args]",
+      "",
+      "Commands:",
+      "  start [prompt]        Start a board-managed Codex session",
+      "  attach [session-id]   Attach to an existing board-managed session",
+      "  help                  Show this message"
+    ].join("\n")
+  );
 }
 
-function printAttachPlaceholder(): void {
-  console.log([
-    "[codex-board] attach",
-    "- Attach flow skeleton is ready.",
-    "- Next step: inspect active and recent board-managed sessions before selecting one."
-  ].join("\n"));
+export async function runCli(args: string[], dependencies: CliDependencies = {}): Promise<number> {
+  const io = dependencies.io ?? consoleIO;
+  const command = args[0];
+  const commandArgs = args.slice(1);
+  const openPanel = dependencies.openPanel ?? openPanelUrl;
+
+  switch (command) {
+    case "start":
+      return (dependencies.runStartCommand ?? runStartCommand)(commandArgs, {
+        io,
+        openPanel
+      });
+    case "attach":
+      return (dependencies.runAttachCommand ?? runAttachCommand)(commandArgs, {
+        io,
+        openPanel
+      });
+    case "help":
+    case undefined:
+      printHelp(io);
+      return 0;
+    default:
+      io.error(`[codex-board] Unknown command: ${command}`);
+      printHelp(io);
+      return 1;
+  }
 }
 
-switch (command) {
-  case "start":
-    printStartPlaceholder();
-    break;
-  case "attach":
-    printAttachPlaceholder();
-    break;
-  case "help":
-  case undefined:
-    printHelp();
-    break;
-  default:
-    console.error(`[codex-board] Unknown command: ${command}`);
-    printHelp();
-    process.exitCode = 1;
+const currentFile = fileURLToPath(import.meta.url);
+if (process.argv[1] === currentFile) {
+  const exitCode = await runCli(process.argv.slice(2));
+  process.exitCode = exitCode;
 }

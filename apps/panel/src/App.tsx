@@ -6,6 +6,7 @@ import {
   buildOverviewTimeline,
   createDemoBoardState,
   loadPanelSnapshot,
+  readPanelTargetFromSearch,
   type PanelSnapshot
 } from "./panelState.js";
 
@@ -53,7 +54,15 @@ function getFeedLabel(snapshot: PanelSnapshot, loading: boolean): string {
     return "Connecting";
   }
 
-  return snapshot.source === "bridge" ? "Live bridge" : "Demo fallback";
+  if (snapshot.source === "bridge") {
+    return "Live bridge";
+  }
+
+  if (snapshot.source === "empty") {
+    return "Session required";
+  }
+
+  return "Demo fallback";
 }
 
 function getFeedTone(snapshot: PanelSnapshot, loading: boolean): string {
@@ -61,7 +70,15 @@ function getFeedTone(snapshot: PanelSnapshot, loading: boolean): string {
     return "loading";
   }
 
-  return snapshot.source === "bridge" ? "live" : "fallback";
+  if (snapshot.source === "bridge") {
+    return "live";
+  }
+
+  if (snapshot.source === "empty") {
+    return "empty";
+  }
+
+  return "fallback";
 }
 
 function getHeroCopy(snapshot: PanelSnapshot, loading: boolean): string {
@@ -73,15 +90,29 @@ function getHeroCopy(snapshot: PanelSnapshot, loading: boolean): string {
     return "Companion panel 已开始消费 bridge 的归一化状态：顶部摘要、Tabs 与 Overview 时间线都来自真实 `app-server` 事件聚合。";
   }
 
+  if (snapshot.source === "empty") {
+    return "Bridge 已连通，但当前没有可渲染的目标会话。先完成 `codex-board start` 或 `codex-board attach`，再用带 `sessionId` 的 panel URL 打开该视图。";
+  }
+
   return "当前未连上本地 bridge，所以页面先退回 demo snapshot；你仍然可以继续调界面，bridge 恢复后刷新即可切回真实数据。";
 }
 
+function renderTabEmptyState(snapshot: PanelSnapshot): React.JSX.Element | null {
+  if (!snapshot.emptyState) {
+    return null;
+  }
+
+  return renderEmptyState(snapshot.emptyState.title, snapshot.emptyState.body);
+}
+
 export default function App(): React.JSX.Element {
+  const panelTarget = useMemo(() => readPanelTargetFromSearch(window.location.search), []);
   const [activeTab, setActiveTab] = useState<V1PrimaryTab>("Overview");
   const [panelSnapshot, setPanelSnapshot] = useState<PanelSnapshot>(() => ({
     board: createDemoBoardState(),
     source: "fallback",
-    errorMessage: null
+    errorMessage: null,
+    emptyState: null
   }));
   const [loading, setLoading] = useState(true);
 
@@ -89,7 +120,10 @@ export default function App(): React.JSX.Element {
     let cancelled = false;
 
     async function bootstrap(): Promise<void> {
-      const snapshot = await loadPanelSnapshot();
+      const snapshot = await loadPanelSnapshot({
+        baseUrl: panelTarget.baseUrl,
+        sessionId: panelTarget.sessionId
+      });
       if (cancelled) {
         return;
       }
@@ -103,7 +137,7 @@ export default function App(): React.JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [panelTarget.baseUrl, panelTarget.sessionId]);
 
   const { board } = panelSnapshot;
   const { session, overview, tools, searches, skills, memories, context } = board;
@@ -119,6 +153,7 @@ export default function App(): React.JSX.Element {
   const overviewTimeline = useMemo(() => buildOverviewTimeline(board), [board]);
   const feedLabel = getFeedLabel(panelSnapshot, loading);
   const feedTone = getFeedTone(panelSnapshot, loading);
+  const tabEmptyState = renderTabEmptyState(panelSnapshot);
 
   return (
     <main className="shell">
@@ -142,8 +177,11 @@ export default function App(): React.JSX.Element {
 
       {panelSnapshot.errorMessage && !loading && (
         <section className="notice-banner">
-          <strong>Bridge unavailable</strong>
-          <p>{panelSnapshot.errorMessage}. 当前继续展示 demo snapshot。</p>
+          <strong>{panelSnapshot.source === "fallback" ? "Bridge unavailable" : "Session unavailable"}</strong>
+          <p>
+            {panelSnapshot.errorMessage}
+            {panelSnapshot.source === "fallback" ? "。当前继续展示 demo snapshot。" : "。请重新选择可用会话。"}
+          </p>
         </section>
       )}
 
@@ -188,7 +226,7 @@ export default function App(): React.JSX.Element {
 
       {activeTab === "Overview" && (
         <>
-          {renderList("Recent activity", overviewTimeline)}
+          {tabEmptyState ?? renderList("Recent activity", overviewTimeline)}
           <section className="panel-block two-column-grid">
             <article className="detail-card">
               <div className="section-heading">
@@ -196,7 +234,10 @@ export default function App(): React.JSX.Element {
               </div>
               <ul>
                 <li>Source: {feedLabel}</li>
-                <li>Bridge endpoint: `GET /api/state`</li>
+                <li>
+                  Bridge endpoint: `GET /api/state`
+                  {panelTarget.sessionId ? `?sessionId=${panelTarget.sessionId}` : ""}
+                </li>
                 <li>Health endpoint: `GET /healthz`</li>
               </ul>
             </article>
@@ -215,7 +256,9 @@ export default function App(): React.JSX.Element {
       )}
 
       {activeTab === "Tools" &&
-        (tools.length > 0 ? (
+        (tabEmptyState ? (
+          tabEmptyState
+        ) : tools.length > 0 ? (
           <section className="event-list">
             {tools.map((item) => (
               <article className="event-card" key={`${item.title}-${item.startedAt}`}>
@@ -234,7 +277,9 @@ export default function App(): React.JSX.Element {
         ))}
 
       {activeTab === "Search" &&
-        (searches.length > 0 ? (
+        (tabEmptyState ? (
+          tabEmptyState
+        ) : searches.length > 0 ? (
           <section className="event-list">
             {searches.map((item) => (
               <article className="event-card" key={`${item.query}-${item.startedAt}`}>
@@ -253,7 +298,9 @@ export default function App(): React.JSX.Element {
         ))}
 
       {activeTab === "Skills" &&
-        (skills.length > 0 ? (
+        (tabEmptyState ? (
+          tabEmptyState
+        ) : skills.length > 0 ? (
           <section className="event-list">
             {skills.map((item) => (
               <article className="event-card" key={`${item.skillName}-${item.timestamp}`}>
@@ -271,7 +318,9 @@ export default function App(): React.JSX.Element {
         ))}
 
       {activeTab === "Memories" &&
-        (memories.length > 0 ? (
+        (tabEmptyState ? (
+          tabEmptyState
+        ) : memories.length > 0 ? (
           <section className="event-list">
             {memories.map((item) => (
               <article className="event-card" key={`${item.sourceThreadId}-${item.usedByTurnId}`}>
@@ -288,32 +337,35 @@ export default function App(): React.JSX.Element {
           renderEmptyState("No memory citations yet", "V1 只展示本轮真正引用到的 memory/citation。")
         ))}
 
-      {activeTab === "Context" && (
-        <section className="panel-block two-column-grid">
-          <article className="detail-card">
-            <div className="section-heading">
-              <span>Budget snapshot</span>
-            </div>
-            <ul>
-              <li>Used: {formatTokens(context.usedTokens)}</li>
-              <li>Remaining: {formatTokens(context.remainingTokens)}</li>
-              <li>Trend: {context.growthTrend}</li>
-            </ul>
-          </article>
-          <article className="detail-card">
-            <div className="section-heading">
-              <span>Compaction history</span>
-            </div>
-            <ul>
-              {context.recentCompactions.length > 0 ? (
-                context.recentCompactions.map((item) => <li key={item}>{formatLocalTime(item)}</li>)
-              ) : (
-                <li>No compaction events yet</li>
-              )}
-            </ul>
-          </article>
-        </section>
-      )}
+      {activeTab === "Context" &&
+        (tabEmptyState ? (
+          tabEmptyState
+        ) : (
+          <section className="panel-block two-column-grid">
+            <article className="detail-card">
+              <div className="section-heading">
+                <span>Budget snapshot</span>
+              </div>
+              <ul>
+                <li>Used: {formatTokens(context.usedTokens)}</li>
+                <li>Remaining: {formatTokens(context.remainingTokens)}</li>
+                <li>Trend: {context.growthTrend}</li>
+              </ul>
+            </article>
+            <article className="detail-card">
+              <div className="section-heading">
+                <span>Compaction history</span>
+              </div>
+              <ul>
+                {context.recentCompactions.length > 0 ? (
+                  context.recentCompactions.map((item) => <li key={item}>{formatLocalTime(item)}</li>)
+                ) : (
+                  <li>No compaction events yet</li>
+                )}
+              </ul>
+            </article>
+          </section>
+        ))}
     </main>
   );
 }

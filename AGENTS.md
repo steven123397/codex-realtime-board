@@ -56,11 +56,11 @@
 当前仓库已经具备以下高层能力：
 
 - `pnpm workspace + TypeScript` monorepo 基础骨架。
-- `packages/shared` 中的 `V1` 共享数据模型、主 Tab 常量和 bridge 健康合同。
-- `apps/bridge` 的 mock / live 双路径、`app-server` 客户端、状态归一化和 `/healthz`、`/api/state` HTTP 出口。
-- `apps/panel` 对 bridge snapshot 的消费路径、demo fallback，以及首版 Overview / Tabs 面板壳层。
-- `apps/cli` 的 `start` / `attach` 命令入口占位。
-- 一组围绕 bridge 状态归一化、HTTP API、panel 数据加载与衍生状态的最小单测。
+- `packages/shared` 中的 `V1` 共享数据模型、主 Tab 常量、bridge 健康合同，以及会话管理共享合同。
+- `apps/bridge` 的 mock / live 双路径、`app-server` 客户端、多会话状态归一化，以及 `/healthz`、`/api/sessions`、`/api/state`、`/api/session/start`、`/api/session/attach` HTTP 出口。
+- `apps/panel` 对 bridge snapshot 的按会话消费路径、demo fallback，以及会话缺失 / 未选定时的明确空态。
+- `apps/cli` 的 `start` / `attach` 真实控制路径与 bridge 可用性检查。
+- 一组围绕 shared 合同、bridge 控制面、CLI 编排入口、panel 数据加载与衍生状态的最小单测。
 
 ## 当前优先级
 
@@ -68,7 +68,7 @@
 
 0. 先把仓库治理体系、文档入口和单一事实来源收口稳定。
 1. 稳住 `bridge` 对 `Codex app-server` 协议的消费、归一化和对外状态合同。
-2. 推进 `launcher/session` 编排，把 `start` / `attach` 从占位入口推进到可用主路径。
+2. 稳住已经打通的 `launcher/session` 编排主路径，并继续把 app-server / panel 生命周期纳入 launcher。
 3. 在前两项稳定后，再继续扩 `panel` 的实时交互、更多 Tab 细节和宿主封装。
 
 不要把这几条路线混在同一实现步骤里。
@@ -81,7 +81,7 @@
 - 保持 `packages/shared` 作为跨端数据模型和状态合同的单一来源。
 - 继续稳住 `bridge` 的 live / mock 双路径、最小 HTTP 契约和状态归一化行为。
 - 继续把 `panel` 维持在“消费 bridge 状态而不是直接啃底层协议”的结构边界上。
-- 后续按真实需求继续推进 `launcher`、会话发现、历史会话和更实时的 UI，而不是回退为终端字符流解析方案。
+- 后续在已经打通的 `start / attach` 主链路上，继续推进 launcher 生命周期收口、会话发现 / 选择体验和更实时的 UI，而不是回退为终端字符流解析方案。
 
 相关状态文档见：
 

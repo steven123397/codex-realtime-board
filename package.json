@@ -4,7 +4,7 @@
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "build": "corepack pnpm -r --filter @codex-realtime-board/* build",
-    "test": "corepack pnpm --filter @codex-realtime-board/bridge test && corepack pnpm --filter @codex-realtime-board/panel test",
+    "test": "corepack pnpm --filter @codex-realtime-board/shared test && corepack pnpm --filter @codex-realtime-board/bridge test && corepack pnpm --filter @codex-realtime-board/cli test && corepack pnpm --filter @codex-realtime-board/panel test",
     "typecheck": "corepack pnpm --filter @codex-realtime-board/shared build && corepack pnpm -r --filter @codex-realtime-board/* typecheck",
     "dev:cli": "corepack pnpm --filter @codex-realtime-board/shared build && corepack pnpm --filter @codex-realtime-board/cli dev",
     "dev:bridge": "corepack pnpm --filter @codex-realtime-board/shared build && corepack pnpm --filter @codex-realtime-board/bridge dev",
