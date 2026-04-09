@@ -1,37 +1,27 @@
-import type { AttachSessionResult, ManagedSessionSummary } from "@codex-realtime-board/shared";
+import type { AttachSessionResult } from "@codex-realtime-board/shared";
 
 import { consoleIO, type CommandIO } from "./commandIO.js";
 import { ensureLauncherReady, type LauncherReadyResult } from "./launcherRuntime.js";
+import {
+  promptForSessionSelection,
+  renderSessionSelection
+} from "./sessionSelector.js";
 import { openPanelUrl } from "./startCommand.js";
 
 export interface AttachCommandDependencies {
   ensureLauncherReady?: () => Promise<LauncherReadyResult>;
   openPanel?: (url: string) => Promise<void> | void;
   io?: CommandIO;
-}
-
-function formatSessionLine(index: number, session: ManagedSessionSummary): string {
-  return `${index}. ${session.sessionId} | ${session.title} | ${session.status} | ${session.lastActiveAt}`;
+  selectSession?: (result: AttachSessionResult) => Promise<string | null>;
 }
 
 function printSelectionGuidance(result: AttachSessionResult, io: CommandIO): void {
-  if (result.sessions.active.length > 0) {
-    io.log(
-      ["Active sessions:", ...result.sessions.active.map((session, index) => formatSessionLine(index + 1, session))].join(
-        "\n"
-      )
-    );
-  }
+  io.log(renderSessionSelection(result.sessions));
+}
 
-  if (result.sessions.recent.length > 0) {
-    io.log(
-      ["Recent sessions:", ...result.sessions.recent.map((session, index) => formatSessionLine(index + 1, session))].join(
-        "\n"
-      )
-    );
-  }
-
-  io.log("Run `codex-board attach <session-id>` to select one.");
+async function selectSessionInteractively(result: AttachSessionResult): Promise<string | null> {
+  const selection = await promptForSessionSelection(result.sessions);
+  return selection.session?.sessionId ?? null;
 }
 
 export async function runAttachCommand(
@@ -41,7 +31,7 @@ export async function runAttachCommand(
   const io = dependencies.io ?? consoleIO;
   const launcher = await (dependencies.ensureLauncherReady ?? ensureLauncherReady)();
   const targetSessionId = args[0] ?? null;
-  const result = await launcher.bridge.client.attachSession({
+  let result = await launcher.bridge.client.attachSession({
     sessionId: targetSessionId
   });
 
@@ -75,6 +65,45 @@ export async function runAttachCommand(
   if (result.resolution === "not-found") {
     io.error(`Managed session not found: ${targetSessionId ?? "unknown"}`);
     printSelectionGuidance(result, io);
+    return 1;
+  }
+
+  printSelectionGuidance(result, io);
+
+  const selectedSessionId = await (dependencies.selectSession ?? selectSessionInteractively)(result);
+  if (!selectedSessionId) {
+    io.error("Selection cancelled or invalid.");
+    return 1;
+  }
+
+  result = await launcher.bridge.client.attachSession({
+    sessionId: selectedSessionId
+  });
+
+  if (result.resolution === "attached" && result.session && result.panelUrl) {
+    const openPanel = dependencies.openPanel ?? openPanelUrl;
+    try {
+      await openPanel(result.panelUrl);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to open panel";
+      io.error(`Failed to open panel automatically: ${message}`);
+    }
+
+    io.log(
+      [
+        "[codex-board] attach",
+        `- App server: ${launcher.appServer.appServerUrl} (${launcher.appServer.launched ? "started" : "ready"})`,
+        `- Bridge: ${launcher.bridge.bridgeBaseUrl} (${launcher.bridge.launched ? "started" : "ready"})`,
+        `- Panel runtime: ${launcher.panel.panelBaseUrl} (${launcher.panel.launched ? "started" : "ready"})`,
+        `- Session: ${result.session.sessionId}`,
+        `- Panel: ${result.panelUrl}`
+      ].join("\n")
+    );
+    return 0;
+  }
+
+  if (result.resolution === "not-found") {
+    io.error(`Managed session not found: ${selectedSessionId}`);
     return 1;
   }
 

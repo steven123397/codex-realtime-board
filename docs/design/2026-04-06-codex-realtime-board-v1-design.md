@@ -4,8 +4,9 @@
 
 - 背景文档：`../background/request.md`
 - 状态文档：`../status/mainline_status.md`
-- 最新完成计划：`../plan/history_plan.md#2026-04-09-launcher-lifecycle-orchestration`
-- 最近完成计划：`../plan/history_plan.md#2026-04-08-start-attach-orchestration`
+- 最新完成计划：`../plan/history_plan.md#2026-04-09-attach-interactive-selector`
+- 上一轮完成计划：`../plan/history_plan.md#2026-04-09-launcher-lifecycle-orchestration`
+- 更早完成计划：`../plan/history_plan.md#2026-04-08-start-attach-orchestration`
 
 ## 当前有效性说明
 
@@ -83,6 +84,12 @@
 - 若没有活跃会话，则显示最近会话列表。
 
 V1 的首轮工程落地允许先用终端输出 `Active / Recent` 列表，并通过 `codex-board attach <session-id>` 明确目标；后续再把它收口为更完整的交互式选择器。
+
+当前下一步实现将优先采用最小终端交互式选择器：
+
+- 先列出 `Active` 与 `Recent` 两组会话。
+- 用户通过编号或会话 id 选择目标。
+- 仍保持在 CLI 主工作面内完成选择，不额外引入新的全屏 TUI。
 
 会话选择器分为两块：
 

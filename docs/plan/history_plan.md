@@ -25,6 +25,17 @@
 - 过程摘要：
   - 这一轮把“尽量减少手动前置拉起本地进程”的目标推进到可用状态；后续重点转向 attach 交互式选择、panel 实时刷新，以及 runtime manifest / 进程清理策略。
 
+## 2026-04-09 attach-interactive-selector
+
+- 完成时间：2026-04-09
+- 对应设计：`../design/2026-04-06-codex-realtime-board-v1-design.md`
+- 完成内容：
+  - 在 `apps/cli` 中新增最小 session selector，按 `Active / Recent` 分组输出稳定编号。
+  - 让 `codex-board attach` 在多会话场景下支持交互式编号选择，不再要求用户重新手输一次 `session-id`。
+  - 补齐 CLI 侧选择流程测试，并保持 attach 仍然只消费 bridge 暴露的会话列表与 attach 控制合同。
+- 过程摘要：
+  - 这一轮把 attach 从“静态提示”推进到“可直接选择”的最小可用体验；后续仍可继续增强重试、筛选和更完整的会话总览入口。
+
 ## 2026-04-08 bootstrap-monorepo-skeleton
 
 - 完成时间：2026-04-08
