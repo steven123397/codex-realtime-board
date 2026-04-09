@@ -1,4 +1,15 @@
-cod# Codex Realtime Board V1 设计方案
+# Codex Realtime Board V1 设计方案
+
+## 关联文档
+
+- 背景文档：`../background/request.md`
+- 状态文档：`../status/mainline_status.md`
+- 相关计划：`../plan/2026-04-08-start-attach-orchestration.md`
+
+## 当前有效性说明
+
+- 当前有效：是
+- 当前实现与实时进展以 `../status/mainline_status.md` 为准。
 
 ## 1. 背景
 

@@ -1,0 +1,39 @@
+version: 1
+workflow:
+  mode: adaptive
+  auto_trigger: true
+  opt_out_phrases:
+    - "直接做"
+    - "跳过文档治理"
+    - "先别走这套流程"
+paths:
+  root_rules:
+    - AGENTS.md
+  subtree_rules_glob: "**/AGENTS.md"
+  index: docs/index.md
+  background_dir: docs/background
+  design_dir: docs/design
+  plan_dir: docs/plan
+  plan_archive: docs/plan/history_plan.md
+  status_dir: docs/status
+  review_findings: docs/status/code_review_status.md
+  readme: README.md
+templates:
+  design: docs/design/template.md
+  plan: docs/plan/template.md
+  status: docs/status/template.md
+task_tiers:
+  light:
+    plan_required: false
+    design_required: false
+  standard:
+    plan_required: false
+    design_required: conditional
+  heavy:
+    plan_required: true
+    design_required: true
+bootstrap:
+  create_docs_index: true
+  create_templates: true
+  create_root_agents: true
+  create_subtree_agents: conditional
