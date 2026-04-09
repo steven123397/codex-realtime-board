@@ -1,8 +1,16 @@
-import type { BoardStateSnapshot } from "@codex-realtime-board/shared";
+import type {
+  BoardStateSnapshot,
+  ManagedSessionListSnapshot
+} from "@codex-realtime-board/shared";
 
 export interface LoadBoardStateOptions {
   baseUrl?: string;
   sessionId?: string | null;
+  fetchImpl?: typeof fetch;
+}
+
+export interface LoadManagedSessionsOptions {
+  baseUrl?: string;
   fetchImpl?: typeof fetch;
 }
 
@@ -28,6 +36,10 @@ export class BridgeApiError extends Error {
 
 const DEFAULT_BRIDGE_URL = "http://127.0.0.1:4317";
 
+function createBaseUrl(options: { baseUrl?: string }): string {
+  return options.baseUrl ?? DEFAULT_BRIDGE_URL;
+}
+
 async function readErrorPayload(response: Response): Promise<unknown> {
   const contentType = response.headers.get("content-type") ?? "";
   if (contentType.includes("application/json")) {
@@ -39,7 +51,7 @@ async function readErrorPayload(response: Response): Promise<unknown> {
 }
 
 export async function loadBoardState(options: LoadBoardStateOptions = {}): Promise<BoardStateSnapshot> {
-  const baseUrl = options.baseUrl ?? DEFAULT_BRIDGE_URL;
+  const baseUrl = createBaseUrl(options);
   const fetchImpl = options.fetchImpl ?? fetch;
   const url = new URL(`${baseUrl}/api/state`);
   if (options.sessionId) {
@@ -65,4 +77,22 @@ export async function loadBoardState(options: LoadBoardStateOptions = {}): Promi
   }
 
   return (await response.json()) as BoardStateSnapshot;
+}
+
+export async function loadManagedSessions(
+  options: LoadManagedSessionsOptions = {}
+): Promise<ManagedSessionListSnapshot> {
+  const baseUrl = createBaseUrl(options);
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const response = await fetchImpl(new URL(`${baseUrl}/api/sessions`));
+
+  if (!response.ok) {
+    const payload = await readErrorPayload(response);
+    throw new BridgeApiError(`Bridge request failed with status ${response.status}`, {
+      status: response.status,
+      details: payload
+    });
+  }
+
+  return (await response.json()) as ManagedSessionListSnapshot;
 }

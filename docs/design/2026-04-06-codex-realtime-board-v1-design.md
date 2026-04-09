@@ -146,6 +146,11 @@ V1 主 Tab 固定为：
 - 默认按工具会话聚合
 - 支持展开查看原始事件
 
+在当前 companion shell 中，`Overview` 还承载两类运维向反馈：
+
+- bridge connection feed（最近同步时间、stale / reconnect 状态、刷新节奏）
+- session directory（运行中 `Active` / `Recent` 会话切换）
+
 ### 4.3 Tools
 
 `Tools` Tab 的默认信息顺序为：
@@ -258,6 +263,15 @@ V1 当前已经形成的最小控制面包括：
 - `POST /api/session/attach`
 
 panel 只消费这些稳定控制 / 状态合同，而不直接绑定底层 `app-server` 协议。
+
+在 panel 的“更实时 companion 视图”这条主线上，当前优先采用的推进方式是：
+
+- 继续把 `/api/state` 作为会话快照入口，并通过 `/api/sessions` 暴露运行中会话目录。
+- 先用 panel 侧定时轮询 + 手动刷新把一次性 snapshot 推进到更完整的实时体验。
+- 当刷新失败且之前已经拿到 live snapshot 时，优先保留最后一次成功快照，并明确标注 stale / reconnect，而不是立刻退回 demo fallback。
+- 运行中的会话切换继续建立在 bridge 暴露的 session directory 上，而不是让 panel 自己推断底层线程状态。
+- 在 bridge 对外合同保持稳定前，不让 panel 直接订阅底层 `app-server` 事件面。
+- 后续如果要从 snapshot 轮询继续升级，也优先评估 bridge 侧的 cursor / delta / SSE 路径，而不是让 panel 越过 bridge 直接接底层协议。
 
 ## 6. 本地已验证的协议信号
 

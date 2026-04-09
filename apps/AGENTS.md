@@ -25,6 +25,7 @@
 - 涉及跨端数据结构、状态枚举、健康响应或主 Tab 常量时，优先修改 `packages/shared/`，不要在 `apps/` 内复制合同。
 - `bridge` 的职责是把原始协议事件收口为稳定的产品语义；不要把底层协议细节直接泄漏到 panel。
 - `panel` 应优先通过 `api.ts`、`panelState.ts` 等入口消费 bridge 状态，不要在组件内直接写协议推断逻辑。
+- `panel` 的实时化优先沿 bridge snapshot + session directory 合同推进轮询 / stale / reconnect / 会话切换等能力，不直接跳到前端直连 `Codex app-server` 协议。
 - 修改 `bridge` 或 `panel` 时，尽量保持 mock / live 双路径都还能工作，避免只顾一条路径。
 - `cli` 当前已经接入 launcher 运行时编排、bridge 控制面和最小 attach 交互式选择器；后续继续推进 attach 体验或 runtime 管理策略时，要先更新设计和状态文档，再扩命令行为。
 

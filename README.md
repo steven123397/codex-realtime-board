@@ -10,7 +10,7 @@
 - 已确认优先走 `Codex app-server` 协议，而不是解析终端字符流。
 - 已落地 `pnpm workspace + TypeScript` monorepo 与共享数据模型骨架。
 - `apps/bridge` 已具备 mock / live 双路径、board-managed session registry、`/api/sessions`、`/api/state`、`/api/session/start`、`/api/session/attach` 和多会话状态归一化能力。
-- `apps/panel` 已能按目标 `sessionId` 消费 bridge snapshot；bridge 不可用时回退到 demo state，会话缺失或未选定时进入明确空态。
+- `apps/panel` 已能按目标 `sessionId` 消费 bridge snapshot，并通过定时轮询 + 手动刷新推进到更完整的 companion 视图：支持 stale / reconnect 反馈、运行中会话切换，以及会话缺失 / 未选定时的明确空态；bridge 完全不可用时再回退到 demo state。
 - `apps/cli` 已能先确保本地 `app-server`、bridge 和 panel 运行时可用，再执行 `codex-board start` / `codex-board attach` 并输出目标 panel URL。
 - `codex-board attach` 在多会话场景下已支持最小交互式选择器，可直接在终端按编号选择目标会话。
 
